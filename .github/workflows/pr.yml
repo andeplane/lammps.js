@@ -1,0 +1,89 @@
+name: Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '4.0.18'
+          actions-cache-folder: 'emsdk-cache'
+      
+      - name: Verify Emscripten installation
+        run: |
+          which emcc
+          emcc --version
+          echo "EMSDK_PATH=$EMSDK" >> $GITHUB_ENV
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Build C++ LAMMPS library
+        run: pnpm run build:cpp
+        env:
+          EMSDK_PATH: ${{ env.EMSDK }}
+      
+      - name: Build TypeScript wrapper
+        run: pnpm run build:ts
+      
+      - name: Run example (smoke test)
+        run: pnpm run example
+      
+      - name: Check for build artifacts
+        run: |
+          ls -lh dist/
+          test -f dist/lammps.wasm || (echo "lammps.wasm not found!" && exit 1)
+          test -f dist/lammps.mjs || (echo "lammps.mjs not found!" && exit 1)
+          test -f dist/index.js || (echo "index.js not found!" && exit 1)
+          test -f dist/index.d.ts || (echo "index.d.ts not found!" && exit 1)
+          echo "All build artifacts present!"
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lammps-wasm-build
+          path: |
+            dist/
+          retention-days: 7
+

@@ -1,0 +1,123 @@
+name: Build and Publish
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '4.0.18'
+          actions-cache-folder: 'emsdk-cache'
+      
+      - name: Verify Emscripten installation
+        run: |
+          which emcc
+          emcc --version
+          echo "EMSDK_PATH=$EMSDK" >> $GITHUB_ENV
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Build C++ LAMMPS library
+        run: pnpm run build:cpp
+        env:
+          EMSDK_PATH: ${{ env.EMSDK }}
+      
+      - name: Build TypeScript wrapper
+        run: pnpm run build:ts
+      
+      - name: Run example (smoke test)
+        run: pnpm run example
+      
+      - name: Check for build artifacts
+        run: |
+          ls -lh dist/
+          test -f dist/lammps.wasm || (echo "lammps.wasm not found!" && exit 1)
+          test -f dist/lammps.mjs || (echo "lammps.mjs not found!" && exit 1)
+          test -f dist/index.js || (echo "index.js not found!" && exit 1)
+          test -f dist/index.d.ts || (echo "index.d.ts not found!" && exit 1)
+          echo "All build artifacts present!"
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lammps-wasm-build-main
+          path: |
+            dist/
+          retention-days: 30
+      
+      # Uncomment the following steps when ready to publish to NPM
+      # - name: Check if version changed
+      #   id: check-version
+      #   run: |
+      #     PACKAGE_VERSION=$(node -p "require('./package.json').version")
+      #     echo "version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+      #     if npm view lammps@$PACKAGE_VERSION version 2>/dev/null; then
+      #       echo "Version $PACKAGE_VERSION already published"
+      #       echo "should-publish=false" >> $GITHUB_OUTPUT
+      #     else
+      #       echo "Version $PACKAGE_VERSION is new"
+      #       echo "should-publish=true" >> $GITHUB_OUTPUT
+      #     fi
+      
+      # - name: Publish to NPM
+      #   if: steps.check-version.outputs.should-publish == 'true'
+      #   run: pnpm publish --access public --no-git-checks
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      # - name: Create GitHub Release
+      #   if: steps.check-version.outputs.should-publish == 'true'
+      #   uses: actions/create-release@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     tag_name: v${{ steps.check-version.outputs.version }}
+      #     release_name: Release v${{ steps.check-version.outputs.version }}
+      #     body: |
+      #       Automated release for version ${{ steps.check-version.outputs.version }}
+      #     draft: false
+      #     prerelease: false
+

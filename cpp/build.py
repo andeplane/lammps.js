@@ -313,17 +313,16 @@ build_lammps_library(emsdk_env)
 # Link WASM module (lammpsweb files are already in the library)
 link_wasm_module(emsdk_env, debug_mode=debug_mode, use_asyncify=use_asyncify)
 
-print("Copying compiled files into src directory ...")
+print("Verifying WASM files were generated ...")
 if not os.path.exists("lammps.wasm"):
   print("ERROR: lammps.wasm was not generated!")
   sys.exit(1)
 
-shutil.copyfile("lammps.wasm", "../dist/lammps.wasm")
-shutil.copyfile("lammps.mjs", "../dist/lammps.mjs")
-# with open('lammps.mjs') as f:
-#   content = f.read()
-#   with open("../dist/lammps.mjs", "w") as g:
-#     g.write("/* eslint-disable */\n")
-#     g.write(content)
+if not os.path.exists("lammps.mjs"):
+  print("ERROR: lammps.mjs was not generated!")
+  sys.exit(1)
 
 print("Build complete!")
+print("WASM files generated in cpp/ directory:")
+print(f"  - lammps.wasm")
+print(f"  - lammps.mjs")
