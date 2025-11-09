@@ -213,8 +213,8 @@ def link_wasm_module(emsdk_env, debug_mode=False, use_asyncify=False):
   ])
   
   # Build command with proper quoting
-  # Only quote arguments that contain spaces, not those with = or '
-  emcc_cmd = "emcc " + " ".join(f'"{arg}"' if " " in arg else arg for arg in emcc_args)
+  # Quote arguments that contain shell metacharacters (spaces, quotes, brackets, etc.)
+  emcc_cmd = "emcc " + " ".join(f'"{arg}"' if any(c in arg for c in [" ", "'", "[", "]"]) else arg for arg in emcc_args)
   full_cmd = f'source {emsdk_env} && {emcc_cmd}'
   
   subprocess.run(full_cmd, shell=True, executable="/bin/bash", check=True)
