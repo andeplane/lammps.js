@@ -179,9 +179,11 @@ def link_wasm_module(emsdk_env, debug_mode=False):
     "--pre-js", locate_file_abs,
     "--no-entry",
     "-lembind",
-    "-s", "ENVIRONMENT='web'",
+    "-s", "ENVIRONMENT=web,node,worker",
     "-s", "NO_DISABLE_EXCEPTION_CATCHING=1",
     "-s", "ALLOW_MEMORY_GROWTH=1",
+    "-s", "ALLOW_TABLE_GROWTH=1",
+    "-s", "INITIAL_TABLE=1024",
     "-s", "ASYNCIFY",
     "-s", "MODULARIZE=1",
     "-s", "EXPORTED_RUNTIME_METHODS=['getValue','FS','HEAP32','HEAPF32','HEAPF64']",
@@ -205,7 +207,8 @@ def link_wasm_module(emsdk_env, debug_mode=False):
   ])
   
   # Build command with proper quoting
-  emcc_cmd = "emcc " + " ".join(f'"{arg}"' if any(c in arg for c in [" ", "=", "'", "["]) else arg for arg in emcc_args)
+  # Only quote arguments that contain spaces, not those with = or '
+  emcc_cmd = "emcc " + " ".join(f'"{arg}"' if " " in arg else arg for arg in emcc_args)
   full_cmd = f'source {emsdk_env} && {emcc_cmd}'
   
   subprocess.run(full_cmd, shell=True, executable="/bin/bash", check=True)

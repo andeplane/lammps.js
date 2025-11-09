@@ -1,4 +1,6 @@
-// this file overrides the wasm file path from scriptDirectory (./static/js) to the server's base URL
-Module["locateFile"] = (path, scriptDirectory_unused) => {
-  return path;
-};
+// Allow user to override locateFile, otherwise just return the path
+if (!Module["locateFile"]) {
+  Module["locateFile"] = (path, scriptDirectory_unused) => {
+    return path;
+  };
+}
