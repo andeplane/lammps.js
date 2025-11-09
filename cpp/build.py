@@ -4,6 +4,13 @@ import shutil
 import hashlib
 import sys
 
+# Ensure we're running from the cpp/ directory
+# This allows the script to be called from the root or from cpp/
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if os.getcwd() != script_dir:
+  print(f"Changing directory to: {script_dir}")
+  os.chdir(script_dir)
+
 # Emscripten SDK path - adjust if needed
 EMSDK_PATH = os.environ.get("EMSDK_PATH")
 if not EMSDK_PATH:
@@ -136,9 +143,9 @@ def build_lammps_library(emsdk_env):
   subprocess.run(build_cmd, shell=True, executable="/bin/bash", check=True)
   print("LAMMPS library build complete!")
 
-def link_wasm_module(emsdk_env, debug_mode=False):
+def link_wasm_module(emsdk_env, debug_mode=False, use_asyncify=False):
   """Link the LAMMPS library into a WASM module."""
-  print("Linking WASM module...")
+  print(f"Linking WASM module (asyncify={'enabled' if use_asyncify else 'disabled'})...")
   
   # Find the library files
   lib_path = os.path.join(BUILD_DIR, "liblammps.a")
@@ -172,10 +179,18 @@ def link_wasm_module(emsdk_env, debug_mode=False):
     "--pre-js", locate_file_abs,
     "--no-entry",
     "-lembind",
-    "-s", "ENVIRONMENT='web'",
+    "-s", "ENVIRONMENT=web,node,worker",
     "-s", "NO_DISABLE_EXCEPTION_CATCHING=1",
     "-s", "ALLOW_MEMORY_GROWTH=1",
-    "-s", "ASYNCIFY",
+    "-s", "ALLOW_TABLE_GROWTH=1",
+    "-s", "INITIAL_TABLE=1024",
+  ])
+  
+  # Add ASYNCIFY only if requested
+  if use_asyncify:
+    emcc_args.extend(["-s", "ASYNCIFY"])
+  
+  emcc_args.extend([
     "-s", "MODULARIZE=1",
     "-s", "EXPORTED_RUNTIME_METHODS=['getValue','FS','HEAP32','HEAPF32','HEAPF64']",
     "-s", "EXPORT_NAME='createModule'",
@@ -198,7 +213,8 @@ def link_wasm_module(emsdk_env, debug_mode=False):
   ])
   
   # Build command with proper quoting
-  emcc_cmd = "emcc " + " ".join(f'"{arg}"' if any(c in arg for c in [" ", "=", "'", "["]) else arg for arg in emcc_args)
+  # Quote arguments that contain shell metacharacters (spaces, quotes, brackets, etc.)
+  emcc_cmd = "emcc " + " ".join(f'"{arg}"' if any(c in arg for c in [" ", "'", "[", "]"]) else arg for arg in emcc_args)
   full_cmd = f'source {emsdk_env} && {emcc_cmd}'
   
   subprocess.run(full_cmd, shell=True, executable="/bin/bash", check=True)
@@ -278,6 +294,13 @@ if debug_mode:
 else:
   print("Building in RELEASE mode (optimized)...")
 
+# Check if asyncify flag is passed (default is sync mode)
+use_asyncify = "--asyncify" in sys.argv
+if use_asyncify:
+  print("Building WITH Asyncify (async mode)...")
+else:
+  print("Building in synchronous mode (default, optimized for web workers)...")
+
 # Set up Emscripten environment once
 emsdk_env = setup_emscripten()
 
@@ -288,17 +311,18 @@ configure_cmake(emsdk_env, debug_mode=debug_mode)
 build_lammps_library(emsdk_env)
 
 # Link WASM module (lammpsweb files are already in the library)
-link_wasm_module(emsdk_env, debug_mode=debug_mode)
+link_wasm_module(emsdk_env, debug_mode=debug_mode, use_asyncify=use_asyncify)
 
 print("Copying compiled files into src directory ...")
 if not os.path.exists("lammps.wasm"):
   print("ERROR: lammps.wasm was not generated!")
   sys.exit(1)
 
-#shutil.copyfile("lammps.wasm", "../public/lammps.wasm")
+shutil.copyfile("lammps.wasm", "../dist/lammps.wasm")
+shutil.copyfile("lammps.mjs", "../dist/lammps.mjs")
 # with open('lammps.mjs') as f:
 #   content = f.read()
-#   with open("../src/wasm/lammps.mjs", "w") as g:
+#   with open("../dist/lammps.mjs", "w") as g:
 #     g.write("/* eslint-disable */\n")
 #     g.write(content)
 

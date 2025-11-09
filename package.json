@@ -1,0 +1,52 @@
+{
+  "name": "lammps",
+  "version": "1.0.0",
+  "description": "LAMMPS molecular dynamics simulator compiled to WebAssembly",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./lammps.wasm": "./dist/lammps.wasm",
+    "./lammps.mjs": "./dist/lammps.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', { recursive: true });\"",
+    "build:cpp": "python cpp/build.py",
+    "build:cpp:async": "python cpp/build.py --asyncify",
+    "build:ts": "npm run clean && npm run copy-wasm && npm run compile",
+    "build": "npm run build:cpp && npm run clean && npm run copy-wasm && npm run compile",
+    "build:async": "npm run build:cpp:async && npm run clean && npm run copy-wasm && npm run compile",
+    "copy-wasm": "mkdir -p dist && cp cpp/lammps.wasm dist/ && cp cpp/lammps.mjs dist/",
+    "compile": "tsc",
+    "example": "tsx example.ts"
+  },
+  "keywords": [
+    "lammps",
+    "molecular-dynamics",
+    "wasm",
+    "webassembly",
+    "simulation",
+    "physics"
+  ],
+  "author": "Atomify Team",
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andeplane/atomify"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.0.0"
+  }
+}
+
