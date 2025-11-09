@@ -1,0 +1,16 @@
+# Source files (only ship compiled code)
+src/
+tsconfig.json
+cpp/
+
+# Development files
+node_modules/
+*.log
+.DS_Store
+
+# Build artifacts that shouldn't be in the package
+.git
+.gitignore
+*.tsbuildinfo
+package/
+

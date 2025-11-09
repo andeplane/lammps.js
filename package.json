@@ -1,0 +1,48 @@
+{
+  "name": "lammps",
+  "version": "1.0.0",
+  "description": "LAMMPS molecular dynamics simulator compiled to WebAssembly",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./lammps.wasm": "./dist/lammps.wasm",
+    "./lammps.mjs": "./dist/lammps.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prebuild": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', { recursive: true });\"",
+    "build:cpp": "python cpp/build.py",
+    "build:ts": "npm run prebuild && npm run copy-wasm && npm run compile",
+    "build": "npm run build:cpp && npm run build:ts",
+    "copy-wasm": "mkdir -p dist && cp cpp/lammps.wasm dist/ && cp cpp/lammps.mjs dist/",
+    "compile": "tsc"
+  },
+  "keywords": [
+    "lammps",
+    "molecular-dynamics",
+    "wasm",
+    "webassembly",
+    "simulation",
+    "physics"
+  ],
+  "author": "Atomify Team",
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andeplane/atomify"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
+
