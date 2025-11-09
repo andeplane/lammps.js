@@ -4,6 +4,8 @@ import shutil
 import hashlib
 import sys
 
+LAMMPS_BRANCH = "stable_22Jul2025_update1"
+
 # Ensure we're running from the cpp/ directory
 # This allows the script to be called from the root or from cpp/
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -43,9 +45,9 @@ def copy_moltemplate_files():
 def copy_patch_and_atomify_fix():
   """Copy custom patch file and fix_atomify (not part of standard LAMMPS)."""
   files = [
-    ("lammps.patch", "lammps/src/lammps.patch"),
-    ("lammpsweb/fix_atomify.cpp", "lammps/src/fix_atomify.cpp"),
-    ("lammpsweb/fix_atomify.h", "lammps/src/fix_atomify.h"),
+    # ("lammps.patch", "lammps/src/lammps.patch"),
+    # ("lammpsweb/fix_atomify.cpp", "lammps/src/fix_atomify.cpp"),
+    # ("lammpsweb/fix_atomify.h", "lammps/src/fix_atomify.h"),
   ]
   for src, dst in files:
     if file_content(src) != file_content(dst):
@@ -104,7 +106,7 @@ def configure_cmake(emsdk_env, debug_mode=False):
   package_flags = [f"-DPKG_{pkg}=ON" for pkg in packages]
   
   # Common compiler flags
-  cc_flags_common = "-DLAMMPS_EXCEPTIONS -DLAMMPS_SMALLSMALL -s NO_DISABLE_EXCEPTION_CATCHING=1 -DCOLVARS_LAMMPS"
+  cc_flags_common = "-DLAMMPS_EXCEPTIONS -s NO_DISABLE_EXCEPTION_CATCHING=1 -DCOLVARS_LAMMPS"
   
   if debug_mode:
     # Debug flags
@@ -121,7 +123,7 @@ def configure_cmake(emsdk_env, debug_mode=False):
     f"-DCMAKE_BUILD_TYPE={build_type}",
     "-DCMAKE_CXX_STANDARD=17",
     "-DCMAKE_CXX_STANDARD_REQUIRED=ON",
-    "-DLAMMPS_SIZES=smallsmall",  # Use 32-bit integers (matches Makefile)
+    "-DLAMMPS_SIZES=smallbig",
     "-DBUILD_MPI=OFF",  # Use LAMMPS built-in MPI STUBS for serial build
     "-DDOWNLOAD_VORO=ON",  # Let CMake download and build Voro++ automatically
     f'-DCMAKE_CXX_FLAGS="{cc_flags}"',
@@ -223,7 +225,7 @@ def link_wasm_module(emsdk_env, debug_mode=False, use_asyncify=False):
 if not os.path.exists('lammps'):
   # First clone lammps
   print("Could not find local clone of LAMMPS, cloning ...")
-  subprocess.run("git clone --depth 1 --branch stable_23Jun2022_update1  https://github.com/lammps/lammps.git", shell=True, check=True)
+  subprocess.run(f"git clone --depth 1 --branch {LAMMPS_BRANCH}  https://github.com/lammps/lammps.git", shell=True, check=True)
   
   # Verify lammps directory was created
   if not os.path.exists('lammps'):
