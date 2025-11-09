@@ -1,12 +1,24 @@
-import { LammpsWeb } from "./src/index";
+import { LammpsWeb } from "./dist/index.js";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import { readFileSync } from "fs";
+
+// Get the directory of this file
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 async function main() {
   console.log("🚀 Initializing LAMMPS...");
   
-  // Create LAMMPS instance with print callbacks
+  // Read the WASM file into memory for Node.js
+  const wasmPath = join(__dirname, "dist", "lammps.wasm");
+  const wasmBinary = readFileSync(wasmPath);
+  
+  // Create LAMMPS instance with print callbacks and WASM binary
   const lammps = await LammpsWeb.create({
     print: (msg: string) => console.log("LAMMPS:", msg),
     printErr: (msg: string) => console.error("LAMMPS ERROR:", msg),
+    wasmBinary: wasmBinary,
   });
 
   console.log("✅ LAMMPS initialized successfully\n");
@@ -35,13 +47,14 @@ async function main() {
 
   // Run simulation
   console.log("🏃 Running 100 timesteps...");
-  lammps.runCommand("run 100");
+  await lammps.runCommand("run 100");
 
-  // Get final stats
+  // Get final stats  
   console.log("\n📊 Simulation Statistics:");
-  console.log(`  Total atoms: ${lammps.getNumAtoms()}`);
-  console.log(`  Timesteps: ${lammps.getTimesteps()}`);
-  console.log(`  Memory usage: ${(lammps.getMemoryUsage() / 1024 / 1024).toFixed(2)} MB`);
+  const numAtoms = await lammps.computeParticles();
+  console.log(`  Total atoms: ${numAtoms}`);
+  console.log(`  Timesteps: ${await lammps.getTimesteps()}`);
+  console.log(`  Memory usage: ${((await lammps.getMemoryUsage()) / 1024 / 1024).toFixed(2)} MB`);
 
   console.log("\n✅ Simulation complete!");
 }
