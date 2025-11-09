@@ -12,12 +12,12 @@ export type {
   LammpsModuleOptions,
   LammpsModule,
   CreateModuleFunction,
-} from "./types";
+} from "./types.js";
 
-export { ModifierType } from "./types";
+export { ModifierType } from "./types.js";
 
 // Export the main wrapper class
-export { LammpsWeb } from "./wrapper";
+export { LammpsWeb } from "./wrapper.js";
 
 // For advanced users who want direct access to createModule
 // @ts-ignore - This will be resolved from the bundled lammps.mjs

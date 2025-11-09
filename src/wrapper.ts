@@ -3,7 +3,7 @@ import type {
   LammpsModuleOptions,
   LMPModifier,
   CPPArray,
-} from "./types";
+} from "./types.js";
 
 // @ts-ignore - This will be resolved from the bundled lammps.mjs at build time
 import createModuleImport from "./lammps.mjs";
@@ -36,11 +36,22 @@ export class LammpsWeb {
    * @param options - Configuration options for the LAMMPS module
    * @param options.print - Callback for standard output
    * @param options.printErr - Callback for error output
+   * @param options.postStepCallback - Optional callback called after each simulation step (return false to continue, true to pause)
    * @returns Promise that resolves to a LammpsWeb instance
    */
   static async create(options?: LammpsModuleOptions): Promise<LammpsWeb> {
+    // Set up global callback required by LAMMPS WASM
+    const globalObj = globalThis as any;
+    if (!globalObj.postStepCallback) {
+      globalObj.postStepCallback = options?.postStepCallback || (() => false);
+    }
+    
     const Module = await createModule(options || {});
     const instance = new Module.LAMMPSWeb();
+    
+    // Initialize LAMMPS engine
+    instance.start();
+    
     return new LammpsWeb(instance);
   }
 
