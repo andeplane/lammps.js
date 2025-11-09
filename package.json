@@ -20,10 +20,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "prebuild": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', { recursive: true });\"",
+    "clean": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', { recursive: true });\"",
     "build:cpp": "python cpp/build.py",
-    "build:ts": "npm run prebuild && npm run copy-wasm && npm run compile",
-    "build": "npm run build:cpp && npm run build:ts",
+    "build:ts": "npm run clean && npm run copy-wasm && npm run compile",
+    "build": "npm run build:cpp && npm run clean && npm run copy-wasm && npm run compile",
     "copy-wasm": "mkdir -p dist && cp cpp/lammps.wasm dist/ && cp cpp/lammps.mjs dist/",
     "compile": "tsc",
     "example": "tsx example.ts"
