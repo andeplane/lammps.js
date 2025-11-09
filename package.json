@@ -25,7 +25,8 @@
     "build:ts": "npm run prebuild && npm run copy-wasm && npm run compile",
     "build": "npm run build:cpp && npm run build:ts",
     "copy-wasm": "mkdir -p dist && cp cpp/lammps.wasm dist/ && cp cpp/lammps.mjs dist/",
-    "compile": "tsc"
+    "compile": "tsc",
+    "example": "tsx example.ts"
   },
   "keywords": [
     "lammps",
@@ -42,6 +43,7 @@
     "url": "https://github.com/andeplane/atomify"
   },
   "devDependencies": {
+    "tsx": "^4.7.0",
     "typescript": "^5.0.0"
   }
 }
