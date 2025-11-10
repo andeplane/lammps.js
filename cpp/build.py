@@ -126,6 +126,7 @@ def configure_cmake(emsdk_env, debug_mode=False):
     "-DLAMMPS_SIZES=smallbig",
     "-DBUILD_MPI=OFF",  # Use LAMMPS built-in MPI STUBS for serial build
     "-DDOWNLOAD_VORO=ON",  # Let CMake download and build Voro++ automatically
+    "-DLEPTON_ENABLE_JIT=OFF",  # Disable JIT for WebAssembly (asmjit uses x86-specific code)
     f'-DCMAKE_CXX_FLAGS="{cc_flags}"',
     f'-DCMAKE_C_FLAGS="{cc_flags}"',
   ] + package_flags
