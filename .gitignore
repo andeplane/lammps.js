@@ -111,3 +111,12 @@ build
 web/package-lock.json
 .config
 .bash_history
+
+### Node.js ###
+node_modules
+dist
+coverage
+
+cpp/lammps
+cpp/obj
+cpp/.emscripten_cache

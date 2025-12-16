@@ -1,60 +1,109 @@
-# Atomify LAMMPS Online
-A web version of Atomify LAMMPS powered by Emscripten, Codemirror and three.js. You can try it [here](http://folk.uio.no/anderhaf/lammps-web/) or [here](http://editor.lammps.org).
+# lammps.js
 
-## What is LAMMPS? ##
-LAMMPS ([lammps.sandia.gov](http://lammps.sandia.gov), [github.com/lammps/lammps](https://github.com/lammps/lammps)) is a high performance molecular dynamics code written in C++. It is an acronym for Large-scale Atomic/Molecular Massively Parallel Simulator. With [Emscripten](http://kripken.github.io/emscripten-site/), an LLVM-to-JavaScript Compiler, it isn't too hard to compile LAMMPS into asm.js (a subset of Javascript) so it can run in any browser.
+[![CI](https://github.com/alexz/lammps.js/actions/workflows/ci.yml/badge.svg)](https://github.com/alexz/lammps.js/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/lammps.js.svg)](https://www.npmjs.com/package/lammps.js)
 
-## What is Atomify LAMMPS? ##
-Atomify LAMMPS ([ovilab.net/atomify](http://ovilab.net/projects/atomify-lammps/), [github.com/computationalphysics/atomify-lammps](https://github.com/computationalphysics/atomify-lammps)) is an editor for LAMMPS with realtime visualization of atom positions and live plotting of physical quantities. 
+Run LAMMPS directly in the browser — a WebAssembly build with TypeScript-ready bindings.
+The package exports the compiled `lammps.js` module together with a modern interface (`LAMMPSWeb`) that exposes snapshots for particles, bonds and simulation box data.
 
-## Requirements ##
-To run the precompiled version, you only need a simple web server. An example is i.e. [Node.js](https://nodejs.org/en/) and the server.js file in the web directory. See instructions below.
+## Usage
 
-## How to run using Node.js ##
-A precompiled version is already in the web directory. 
-* Install [Node.js](https://nodejs.org/en/) and npm
-* Install bower
+```ts
+import { LammpsClient } from "lammps.js/client";
 
-  ```bash
-  npm install -g bower
-  ```
-* Open the `web` directory in a terminal and install build prerequisites
+const lammps = await LammpsClient.create();
 
- ```bash
- cd web/
- npm install
- ```
+lammps.start().runScript(`
+  units lj
+  atom_style atomic
+  lattice fcc 0.8442
+  region box block 0 3 0 3 0 3
+  create_box 1 box
+  create_atoms 1 box
+  mass 1 1.0
+  pair_style lj/cut 2.5
+  pair_coeff 1 1 1.0 1.0 2.5
+  run 1
+`);
 
-* Start server with
+const particles = lammps.syncParticles({ copy: true });
+console.log(`atoms: ${particles.count}`);
 
-  ```bash
-  grunt
-  ```
-  
-* Open [http://127.0.0.1:8080](http://127.0.0.1:8080)
+const wrapped = lammps.syncParticles({ wrapped: true, copy: true });
+console.log(`wrapped positions length: ${wrapped.positions.length}`);
 
-## Build instructions ##
-You will need the [Emscripten](http://kripken.github.io/emscripten-site/) compiler (instructions in the link). Once you have that, just open the directory containing this README.md file and run
+lammps.dispose();
+```
+
+Advance the solver (via `advance(stepCount, applyPre?, applyPost?)`) between snapshots to receive new frames.
+
+Advance the solver (`advance(stepCount, applyPre?, applyPost?)`) before sampling to obtain subsequent frames.
+The TypeScript definitions are shipped with the package under
+`types/index.d.ts`, so IDEs receive auto-complete everywhere.
+
+
+### High-level client
+
+For a more ergonomic API, use the helpers in `lammps.js/client`:
+
+```ts
+import { LammpsClient } from "lammps.js/client";
+
+const lammps = await LammpsClient.create();
+await fetch("/in.lj")
+  .then(res => res.text())
+  .then(script => lammps.runInput("in.lj", script));
+
+for (let frame = 0; frame < 10; frame += 1) {
+  lammps.advance(1, false, false);
+  const { positions, count } = lammps.syncParticles({ copy: true });
+  console.log(`frame ${frame}: ${count} atoms`);
+}
+
+lammps.dispose();
+```
+
+Advance the solver (via `advance(stepCount, applyPre?, applyPost?)`) between snapshots to receive new frames.
+
+Use `syncParticles({ wrapped: true })` and `syncBonds({ wrapped: true })` to access
+raw periodic coordinates while the default returns minimum-image data, ready for rendering.
+
+Install via npm:
 
 ```bash
-./build.sh
+npm install lammps.js
 ```
 
-This will clone LAMMPS from [github.com/lammps/lammps](https://github.com/lammps/lammps), compile it and copy the new version of LAMMPS into the web directory. 
-
-## Build instructions with Docker
+## Building the wasm bundle
 
 ```bash
-# build the container
-./build_container.sh
-
-# compile in container
-./build_in_container.sh
+npm run build:wasm
 ```
 
-To view the generated site, you can use any simple webserver to host the `web/_site` folder.
+This calls `cpp/build.py`, which keeps the upstream LAMMPS checkout in
+`cpp/lammps` fresh and emits `cpp/lammps.js` (single-file ES module).
 
+## Test suite
+
+The Vitest suite spins up a jsdom environment, instantiates the wasm module,
+loads a miniature Lennard-Jones sample and validates the public interface.
+
+```bash
+npm test
 ```
-cd web/_site
-python3 -m http.server
+
+> The build step fetches the LAMMPS sources on first run. Subsequent runs are
+> incremental thanks to the cached checkout and Emscripten cache.
+
+## Examples
+
+A ready-to-run Three.js demo lives in `examples/threejs`:
+
+```bash
+cd examples/threejs
+npm install
+npm run dev
 ```
+
+It links against the local workspace copy of `lammps.js` and renders the
+Lennard-Jones sample (`tests/fixtures/lj.mini.in`).
