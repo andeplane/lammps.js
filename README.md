@@ -1,6 +1,6 @@
 # lammps.js
 
-[![CI](https://github.com/alexz/lammps.js/actions/workflows/ci.yml/badge.svg)](https://github.com/alexz/lammps.js/actions/workflows/ci.yml)
+[![CI](https://github.com/lammps/lammps.js/actions/workflows/ci.yml/badge.svg)](https://github.com/lammps/lammps.js/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/lammps.js.svg)](https://www.npmjs.com/package/lammps.js)
 
 Run LAMMPS directly in the browser — a WebAssembly build with TypeScript-ready bindings.
