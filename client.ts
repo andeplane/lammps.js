@@ -10,6 +10,58 @@ import type {
 
 const DEFAULT_WORKDIR = "/work";
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function findFirstRunOrMinimizeIndex(lines: string[]): number {
+  return lines.findIndex((line) => /^\s*(run|minimize)(\s|$)/.test(line));
+}
+
+function hasActiveAsyncFixBeforeIndex(lines: string[], fixId: string, index: number): boolean {
+  const escapedId = escapeRegex(fixId);
+  const pattern = new RegExp(`^\\s*fix\\s+${escapedId}\\s+\\S+\\s+js/async(\\s|$)`, "m");
+  const unfixPattern = new RegExp(`^\\s*unfix\\s+${escapedId}(\\s|$)`, "m");
+  let active = false;
+  for (let i = 0; i < index; i += 1) {
+    const line = lines[i];
+    if (pattern.test(line)) {
+      active = true;
+      continue;
+    }
+    if (unfixPattern.test(line)) {
+      active = false;
+    }
+  }
+  return active;
+}
+
+function hasUnfixAfterIndex(lines: string[], fixId: string, index: number): boolean {
+  if (index < 0) {
+    return false;
+  }
+  const escapedId = escapeRegex(fixId);
+  const pattern = new RegExp(`^\\s*unfix\\s+${escapedId}(\\s|$)`, "m");
+  for (let i = index + 1; i < lines.length; i += 1) {
+    if (pattern.test(lines[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function injectAsyncFix(script: string, every: number, fixId: string): string {
+  const trimmed = script.trimEnd();
+  const lines = trimmed.split("\n");
+  const hookIndex = findFirstRunOrMinimizeIndex(lines);
+  if (hookIndex === -1) {
+    return script.endsWith("\n") ? script : `${script}\n`;
+  }
+
+  lines.splice(hookIndex, 0, `fix ${fixId} all js/async ${every}`);
+  return `${lines.join("\n")}\n`;
+}
+
 export interface SyncOptions {
   wrapped?: boolean;
   copy?: boolean;
@@ -43,6 +95,14 @@ export interface BoxArrays {
   origin: Float32Array;
   lengths: Float32Array;
   snapshot: BoxSnapshot;
+}
+
+export interface AsyncStepData {
+  step: number;
+  particles?: ParticleArrays;
+  bonds?: BondArrays;
+  box?: BoxArrays;
+  computeScalars?: Record<string, number | null>;
 }
 
 type HeapView = Float32Array | Float64Array | Int32Array | BigInt64Array;
@@ -81,13 +141,13 @@ function viewToTyped(
   if (!view || !view.ptr || !view.length) {
     const heap = heaps.get(0) ?? module.HEAPF32;
     const empty = heap.subarray(0, 0);
-    return copy ? new empty.constructor(empty) : empty;
+    return copy ? empty.slice() : empty;
   }
   const heap = heaps.get(view.type) ?? module.HEAPF32;
   const shift = shifts.get(view.type) ?? 2;
   const start = view.ptr >> shift;
   const typed = heap.subarray(start, start + view.length);
-  return copy ? new typed.constructor(typed) : typed;
+  return copy ? typed.slice() : typed;
 }
 
 function toParticleResult(client: LammpsClient, wrapped: boolean, copy: boolean): ParticleArrays {
@@ -120,6 +180,7 @@ export class LammpsClient {
 
   readonly _heaps: Map<number, HeapView>;
   readonly _shifts: Map<number, number>;
+  readonly #managedAsyncFixIds: Set<string>;
 
   constructor(module: LammpsModule, instance: LAMMPSWeb, options: LammpsClientOptions = {}) {
     this.module = module;
@@ -127,6 +188,7 @@ export class LammpsClient {
     this.workdir = options.workdir ?? DEFAULT_WORKDIR;
     this._heaps = buildHeapMap(module);
     this._shifts = buildShiftMap(module);
+    this.#managedAsyncFixIds = new Set<string>();
 
     try {
       module.FS.mkdir(this.workdir);
@@ -177,10 +239,94 @@ export class LammpsClient {
     return this;
   }
 
+  runScriptAsync(
+    script: string,
+    callback: ((data: AsyncStepData) => void | Promise<void>) | null,
+    options: {
+      every: number;
+      fixId?: string;
+      wrapped?: boolean;
+      copy?: boolean;
+      computeScalars?: string[];
+    } = { every: 1 }
+  ): Promise<this> {
+    const {
+      every,
+      fixId = "jsasync",
+      wrapped = false,
+      copy = true,
+      computeScalars
+    } = options;
+    this.#setAsyncStepCallback(callback, { wrapped, copy, computeScalars });
+
+    const normalizedScript = script.endsWith("\n") ? script : `${script}\n`;
+    const scriptLines = normalizedScript.trimEnd().split("\n");
+    const hookIndex = findFirstRunOrMinimizeIndex(scriptLines);
+    const hasHook = hookIndex !== -1;
+    const definesFix = hasActiveAsyncFixBeforeIndex(scriptLines, fixId, hookIndex);
+    const unfixesFix = hasUnfixAfterIndex(scriptLines, fixId, hookIndex);
+    let injectedFix = false;
+
+    let wrappedScript = normalizedScript;
+    if (hasHook && !definesFix) {
+      if (this.#managedAsyncFixIds.has(fixId)) {
+        const hasFix = this.instance.setAsyncStepFrequency(fixId, every);
+        if (!hasFix) {
+          this.#managedAsyncFixIds.delete(fixId);
+          wrappedScript = injectAsyncFix(normalizedScript, every, fixId);
+          injectedFix = true;
+        }
+      } else {
+        wrappedScript = injectAsyncFix(normalizedScript, every, fixId);
+        injectedFix = true;
+      }
+    }
+
+    let done: Promise<unknown>;
+    try {
+      const result = this.instance.runScript(wrappedScript) as unknown;
+      done =
+        result && typeof (result as Promise<unknown>).then === "function"
+          ? (result as Promise<unknown>)
+          : Promise.resolve();
+    } catch (err) {
+      this.#setAsyncStepCallback(null);
+      throw err;
+    }
+
+    return done
+      .then(() => {
+        if (injectedFix && !unfixesFix) {
+          this.#managedAsyncFixIds.add(fixId);
+        }
+        if (unfixesFix) {
+          this.#managedAsyncFixIds.delete(fixId);
+        }
+        this.#setAsyncStepCallback(null);
+        return this;
+      })
+      .catch((err) => {
+        if (hasHook && !definesFix) {
+          const stillPresent = this.instance.setAsyncStepFrequency(fixId, every);
+          if (stillPresent) {
+            this.#managedAsyncFixIds.add(fixId);
+          } else {
+            this.#managedAsyncFixIds.delete(fixId);
+          }
+        }
+        this.#setAsyncStepCallback(null);
+        throw err;
+      });
+  }
+
   runInput(path: string, content: string | Uint8Array): this {
     this.writeFile(path, content);
     this.instance.runFile(path);
     return this;
+  }
+
+  setAsyncStepFrequency(every: number, fixId = "jsasync"): boolean {
+    return this.instance.setAsyncStepFrequency(fixId, every);
   }
 
   writeFile(path: string, content: string | Uint8Array): this {
@@ -208,6 +354,66 @@ export class LammpsClient {
   syncBox(options: SyncBoxOptions = {}): BoxArrays {
     const copy = options.copy ?? false;
     return toBoxResult(this, copy);
+  }
+
+  getComputeScalar(id: string): number | null {
+    const value = this.instance.getComputeScalar(id);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  getComputeScalars(ids: string[]): Record<string, number | null> {
+    const scalars: Record<string, number | null> = {};
+    for (const id of ids) {
+      scalars[id] = this.getComputeScalar(id);
+    }
+    return scalars;
+  }
+
+  #setAsyncStepCallback(
+    callback: ((data: AsyncStepData) => void | Promise<void>) | null,
+    options: {
+      wrapped?: boolean;
+      copy?: boolean;
+      computeScalars?: string[];
+    } = {}
+  ): this {
+    if (callback === null) {
+      this.instance.setAsyncStepCallback(undefined, undefined);
+      return this;
+    }
+
+    const { wrapped = false, copy = true, computeScalars } = options;
+    const computeScalarIds = computeScalars ? [...computeScalars] : [];
+
+    const module = this.module;
+    const waiter = (promise: Promise<unknown>, donePtr: number, errPtr: number) => {
+      promise.then(
+        () => {
+          module.HEAP32[donePtr >> 2] = 1;
+        },
+        (err) => {
+          module.HEAP32[errPtr >> 2] = 1;
+          module.HEAP32[donePtr >> 2] = 1;
+          module.__lammpsAsyncError = err;
+        }
+      );
+    };
+
+    this.instance.setAsyncStepCallback((step) => {
+      const stepValue = typeof step === "bigint" ? Number(step) : step;
+      const normalizedStep = Number.isFinite(stepValue) ? stepValue : 0;
+      const data: AsyncStepData = {
+        step: normalizedStep,
+        particles: this.syncParticles({ wrapped, copy }),
+        bonds: this.syncBonds({ wrapped, copy }),
+        box: this.syncBox({ copy })
+      };
+      if (computeScalarIds.length > 0) {
+        data.computeScalars = this.getComputeScalars(computeScalarIds);
+      }
+      return callback(data);
+    }, waiter);
+    return this;
   }
 
   getCurrentStep(): number {

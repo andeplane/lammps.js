@@ -2,15 +2,20 @@
 
 #include "atom.h"
 #include "domain.h"
+#include "fix_js_async.h"
 #include "force.h"
 #include "library.h"
 #include "lmptype.h"
+#include "modify.h"
 #include "update.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
+
+#include <emscripten.h>
 
 namespace {
 
@@ -48,6 +53,55 @@ inline void applyMinimumImage(LAMMPS_NS::Domain* domain, double &dx, double &dy,
 }
 
 }  // namespace
+
+namespace LAMMPSWebAsync {
+namespace {
+emscripten::val g_step_callback = emscripten::val::undefined();
+emscripten::val g_promise_waiter = emscripten::val::undefined();
+constexpr int kAsyncSleepMs = 1;
+}  // namespace
+
+void setStepCallback(emscripten::val callback) {
+  g_step_callback = callback;
+}
+
+void setPromiseWaiter(emscripten::val waiter) {
+  g_promise_waiter = waiter;
+}
+
+bool invokeStepCallbackAndWait(std::int32_t step) {
+  if (g_step_callback.isUndefined() || g_step_callback.isNull()) {
+    return true;
+  }
+  if (g_step_callback.typeOf().as<std::string>() != "function") {
+    return true;
+  }
+
+  emscripten::val result = g_step_callback(emscripten::val(step));
+  if (result.isUndefined() || result.isNull()) {
+    return true;
+  }
+
+  emscripten::val then = result["then"];
+  if (then.isUndefined() || then.typeOf().as<std::string>() != "function") {
+    return true;
+  }
+  if (g_promise_waiter.isUndefined() || g_promise_waiter.isNull()) {
+    return true;
+  }
+
+  int done = 0;
+  int failed = 0;
+  g_promise_waiter(result,
+                   emscripten::val(reinterpret_cast<std::uintptr_t>(&done)),
+                   emscripten::val(reinterpret_cast<std::uintptr_t>(&failed)));
+  while (!done) {
+    emscripten_sleep(kAsyncSleepMs);
+  }
+
+  return failed == 0;
+}
+}  // namespace LAMMPSWebAsync
 
 void LAMMPSWeb::destroyLammps(LAMMPS_NS::LAMMPS *ptr) noexcept {
   if (ptr) {
@@ -126,6 +180,31 @@ void LAMMPSWeb::runFile(const std::string &path) {
   lammps_file(static_cast<void *>(sim), path.c_str());
 }
 
+void LAMMPSWeb::setAsyncStepCallback(emscripten::val callback, emscripten::val waiter) {
+  LAMMPSWebAsync::setStepCallback(callback);
+  LAMMPSWebAsync::setPromiseWaiter(waiter);
+}
+
+bool LAMMPSWeb::setAsyncStepFrequency(const std::string &fixId, std::int32_t every) {
+  if (every <= 0) {
+    return false;
+  }
+  auto *sim = raw();
+  if (!sim || !sim->modify) {
+    return false;
+  }
+  const int fixIndex = sim->modify->find_fix(fixId.c_str());
+  if (fixIndex < 0) {
+    return false;
+  }
+  auto *fix = dynamic_cast<LAMMPS_NS::FixJsAsync *>(sim->modify->fix[fixIndex]);
+  if (!fix) {
+    return false;
+  }
+  fix->setFrequency(every);
+  return true;
+}
+
 bool LAMMPSWeb::isReady() const noexcept {
   return hasSimulation();
 }
@@ -149,6 +228,81 @@ double LAMMPSWeb::getTimestepSize() const noexcept {
     return 0.0;
   }
   return sim->update->dt;
+}
+
+double LAMMPSWeb::getComputeScalar(const std::string &id) const noexcept {
+  auto *sim = raw();
+  if (!sim) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  auto *value = static_cast<double *>(
+    lammps_extract_compute(static_cast<void *>(sim), id.c_str(), LMP_STYLE_GLOBAL, LMP_TYPE_SCALAR)
+  );
+  if (!value) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return *value;
+}
+
+EMSCRIPTEN_BINDINGS(lammps_web_module) {
+  emscripten::enum_<LAMMPSWeb::ScalarType>("ScalarType")
+    .value("Float32", LAMMPSWeb::ScalarType::Float32)
+    .value("Float64", LAMMPSWeb::ScalarType::Float64)
+    .value("Int32", LAMMPSWeb::ScalarType::Int32)
+    .value("Int64", LAMMPSWeb::ScalarType::Int64);
+
+  emscripten::value_object<LAMMPSWeb::BufferView>("BufferView")
+    .field("ptr", &LAMMPSWeb::BufferView::ptr)
+    .field("length", &LAMMPSWeb::BufferView::length)
+    .field("components", &LAMMPSWeb::BufferView::components)
+    .field("type", &LAMMPSWeb::BufferView::type);
+
+  emscripten::value_object<LAMMPSWeb::ParticleSnapshot>("ParticleSnapshot")
+    .field("positions", &LAMMPSWeb::ParticleSnapshot::positions)
+    .field("ids", &LAMMPSWeb::ParticleSnapshot::ids)
+    .field("types", &LAMMPSWeb::ParticleSnapshot::types)
+    .field("count", &LAMMPSWeb::ParticleSnapshot::count);
+
+  emscripten::value_object<LAMMPSWeb::BondSnapshot>("BondSnapshot")
+    .field("first", &LAMMPSWeb::BondSnapshot::first)
+    .field("second", &LAMMPSWeb::BondSnapshot::second)
+    .field("count", &LAMMPSWeb::BondSnapshot::count);
+
+  emscripten::value_object<LAMMPSWeb::BoxSnapshot>("BoxSnapshot")
+    .field("matrix", &LAMMPSWeb::BoxSnapshot::matrix)
+    .field("origin", &LAMMPSWeb::BoxSnapshot::origin)
+    .field("lengths", &LAMMPSWeb::BoxSnapshot::lengths);
+
+  emscripten::class_<LAMMPSWeb>("LAMMPSWeb")
+    .constructor<>()
+    .function("start", &LAMMPSWeb::start)
+    .function("stop", &LAMMPSWeb::stop)
+    .function(
+      "advance",
+      emscripten::optional_override([](LAMMPSWeb &self,
+                                       std::int32_t steps,
+                                       emscripten::val applyPre,
+                                       emscripten::val applyPost) {
+        const bool pre = applyPre.isUndefined() ? false : applyPre.as<bool>();
+        const bool post = applyPost.isUndefined() ? false : applyPost.as<bool>();
+        self.advance(steps, pre, post);
+      })
+    )
+    .function("runCommand", &LAMMPSWeb::runCommand)
+    .function("runScript", &LAMMPSWeb::runScript)
+    .function("runFile", &LAMMPSWeb::runFile)
+    .function("setAsyncStepCallback", &LAMMPSWeb::setAsyncStepCallback)
+    .function("setAsyncStepFrequency", &LAMMPSWeb::setAsyncStepFrequency)
+    .function("isReady", &LAMMPSWeb::isReady)
+    .function("getIsRunning", &LAMMPSWeb::getIsRunning)
+    .function("getCurrentStep", &LAMMPSWeb::getCurrentStep)
+    .function("getTimestepSize", &LAMMPSWeb::getTimestepSize)
+    .function("getComputeScalar", &LAMMPSWeb::getComputeScalar)
+    .function("syncParticles", &LAMMPSWeb::syncParticles)
+    .function("syncParticlesWrapped", &LAMMPSWeb::syncParticlesWrapped)
+    .function("syncBonds", &LAMMPSWeb::syncBonds)
+    .function("syncBondsWrapped", &LAMMPSWeb::syncBondsWrapped)
+    .function("syncSimulationBox", &LAMMPSWeb::syncSimulationBox);
 }
 
 LAMMPSWeb::ParticleSnapshot LAMMPSWeb::syncParticles() {

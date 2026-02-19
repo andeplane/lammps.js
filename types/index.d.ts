@@ -42,11 +42,17 @@ export interface LAMMPSWeb {
   runCommand(command: string): void;
   runScript(script: string): void;
   runFile(path: string): void;
+  setAsyncStepCallback(
+    callback?: ((step: number) => void | Promise<void>) | null,
+    waiter?: (promise: Promise<unknown>, donePtr: number, errPtr: number) => void
+  ): void;
+  setAsyncStepFrequency(fixId: string, every: number): boolean;
 
   isReady(): boolean;
   getIsRunning(): boolean;
   getCurrentStep(): number;
   getTimestepSize(): number;
+  getComputeScalar(id: string): number;
 
   syncParticles(): ParticleSnapshot;
   syncParticlesWrapped(): ParticleSnapshot;

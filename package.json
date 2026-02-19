@@ -1,33 +1,32 @@
 {
   "name": "lammps.js",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Run LAMMPS directly in the browser — a WebAssembly build with TypeScript-ready bindings.",
   "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts",
-      "default": "./cpp/lammps.js"
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/cpp/lammps.js"
     },
     "./client": {
-      "types": "./types/client.d.ts",
-      "default": "./client.js"
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
     },
-    "./wasm": "./cpp/lammps.js"
+    "./wasm": "./dist/cpp/lammps.js"
   },
-  "types": "./types/index.d.ts",
+  "types": "./dist/types/index.d.ts",
   "files": [
-    "cpp/lammps.js",
-    "cpp/locateFile.js",
+    "dist",
     "cpp/build.py",
-    "types",
-    "client.js",
-    "client.ts",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build:wasm": "python3 cpp/build.py",
-    "test": "npm run build:wasm && vitest run",
+    "build:dist": "tsc -p tsconfig.build.json",
+    "build": "npm run build:wasm && npm run build:dist",
+    "test": "npm run build && vitest run",
     "test:watch": "vitest watch"
   },
   "devDependencies": {

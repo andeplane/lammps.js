@@ -29,6 +29,14 @@ export interface BoxArrays {
   snapshot: BoxSnapshot;
 }
 
+export interface AsyncStepData {
+  step: number;
+  particles?: ParticleArrays;
+  bonds?: BondArrays;
+  box?: BoxArrays;
+  computeScalars?: Record<string, number | null>;
+}
+
 export interface SyncOptions {
   wrapped?: boolean;
   copy?: boolean;
@@ -60,6 +68,17 @@ export declare class LammpsClient {
   advance(steps?: number, options?: { applyPre?: boolean; applyPost?: boolean }): this;
   runCommand(command: string): this;
   runScript(script: string): this;
+  runScriptAsync(
+    script: string,
+    callback: ((data: AsyncStepData) => void | Promise<void>) | null,
+    options?: {
+      every: number;
+      fixId?: string;
+      wrapped?: boolean;
+      copy?: boolean;
+      computeScalars?: string[];
+    }
+  ): Promise<this>;
   runInput(path: string, content: string | Uint8Array): this;
 
   writeFile(path: string, content: string | Uint8Array): this;
@@ -68,6 +87,10 @@ export declare class LammpsClient {
   syncParticles(options?: SyncOptions): ParticleArrays;
   syncBonds(options?: SyncOptions): BondArrays;
   syncBox(options?: SyncBoxOptions): BoxArrays;
+  getComputeScalar(id: string): number | null;
+  getComputeScalars(ids: string[]): Record<string, number | null>;
+
+  setAsyncStepFrequency(every: number, fixId?: string): boolean;
 
   getCurrentStep(): number;
   getTimestepSize(): number;

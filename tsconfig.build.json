@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": true,
+    "inlineSources": true
+  },
+  "include": ["client.ts", "cpp/lammps.d.ts", "types/**/*.d.ts"]
+}

@@ -1,4 +1,5 @@
 units           lj
+timestep        0.001
 atom_style      atomic
 lattice         fcc 0.8442
 region          box block 0 3 0 3 0 3
@@ -11,4 +12,6 @@ pair_coeff      1 1 1.0 1.0 2.5
 neighbor        0.3 bin
 neigh_modify    every 1 delay 0 check yes
 fix             1 all nve
-run             5
+compute         ctemp all temp
+compute         cke all ke
+run             50000

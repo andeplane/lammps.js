@@ -120,3 +120,4 @@ coverage
 cpp/lammps
 cpp/obj
 cpp/.emscripten_cache
+cpp/build_emscripten

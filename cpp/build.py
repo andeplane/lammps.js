@@ -8,6 +8,7 @@ LAMMPS_TAG = os.environ.get("LAMMPS_TAG", "patch_10Sep2025")
 BASE_DIR = Path(__file__).resolve().parent
 LAMMPS_DIR = BASE_DIR / "lammps"
 SRC_DIR = LAMMPS_DIR / "src"
+DIST_DIR = BASE_DIR.parent / "dist" / "cpp"
 
 # Override with: PACKAGES="yes-molecule yes-kspace"
 PACKAGES = os.environ.get("PACKAGES", "yes-molecule").split()
@@ -15,9 +16,9 @@ PACKAGES = os.environ.get("PACKAGES", "yes-molecule").split()
 # Files you actually need from your local code
 CUSTOM_BASENAMES = [
   "lammpsweb",
+  "fix_js_async",
 ]
 
-LOCATE_FILE = BASE_DIR / "locateFile.js"
 LOCATE_FILE_STUB = """\
 if (typeof Module === "undefined") {
   Module = {};
@@ -113,21 +114,26 @@ def ensure_emcc():
       "Emscripten compiler 'emcc' not found on PATH. Activate emsdk before running build.py."
     )
 
-def ensure_locate_file():
-  if LOCATE_FILE.exists():
+def ensure_locate_file(path: Path) -> None:
+  if path.exists():
     return
-  LOCATE_FILE.write_text(LOCATE_FILE_STUB)
-  print(f"created: {LOCATE_FILE.relative_to(BASE_DIR)}")
+  path.parent.mkdir(parents=True, exist_ok=True)
+  path.write_text(LOCATE_FILE_STUB)
+  print(f"created: {path.relative_to(BASE_DIR.parent)}")
 
 def build_bundle():
   ensure_emcc()
-  ensure_locate_file()
+  locate_file = DIST_DIR / "locateFile.js"
+  ensure_locate_file(locate_file)
   env = os.environ.copy()
   cache_dir = env.setdefault("EM_CACHE", str(BASE_DIR / ".emscripten_cache"))
   Path(cache_dir).mkdir(parents=True, exist_ok=True)
   print("Linking lammps.js via top-level Makefile ...")
+  env["OUT_DIR"] = str(DIST_DIR)
+  env["LOCATE_FILE"] = str(locate_file)
   subprocess.check_call("make wasm", shell=True, cwd=str(BASE_DIR), env=env)
-  if not (BASE_DIR / "lammps.js").exists():
+  output = DIST_DIR / "lammps.js"
+  if not output.exists():
     raise RuntimeError("Emscripten link step completed but did not produce lammps.js")
 
 def main():

@@ -3,14 +3,90 @@
 [![CI](https://github.com/lammps/lammps.js/actions/workflows/ci.yml/badge.svg)](https://github.com/lammps/lammps.js/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/lammps.js.svg)](https://www.npmjs.com/package/lammps.js)
 
-Run LAMMPS directly in the browser — a WebAssembly build with TypeScript-ready bindings.
-The package exports the compiled `lammps.js` module together with a modern interface (`LAMMPSWeb`) that exposes snapshots for particles, bonds and simulation box data.
+LAMMPS in the browser. WebAssembly build + a small TS-friendly client.
 
-## Usage
+## Install
+
+```bash
+npm install lammps.js
+```
+
+## Usage (main flow: `runScriptAsync`)
+
+`runScriptAsync()` is the main API.
+It works with `run ...` and `minimize ...`.
+Your callback is called every `N` steps (`every`).
+LAMMPS waits for the callback Promise before going to the next step.
+If the Promise never resolves, simulation stays paused.
 
 ```ts
 import { LammpsClient } from "lammps.js/client";
 
+const lammps = await LammpsClient.create();
+lammps.start();
+
+await lammps.runScriptAsync(
+  `
+    units lj
+    atom_style atomic
+    lattice fcc 0.8442
+    region box block 0 3 0 3 0 3
+    create_box 1 box
+    create_atoms 1 box
+    mass 1 1.0
+    pair_style lj/cut 2.5
+    pair_coeff 1 1 1.0 1.0 2.5
+    run 5000
+  `,
+  async (data) => {
+    console.log("step", data.step, "count", data.particles?.count);
+    await new Promise(requestAnimationFrame);
+  },
+  { every: 50 }
+);
+```
+
+You can control speed from JS (no `run 1` loop):
+
+```ts
+let speed = 5; // UI-controlled value
+
+await lammps.runScriptAsync(
+  "run 100000",
+  async () => {
+    const delayMs = Math.max(0, 100 - speed * 10);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  },
+  { every: 1 }
+);
+```
+
+You can also include compute scalars in callback data:
+
+```ts
+await lammps.runScriptAsync(
+  `
+    compute ctemp all temp
+    compute cke all ke
+    minimize 0.0 1.0e-6 100 1000
+    uncompute ctemp
+    uncompute cke
+  `,
+  async (data) => {
+    console.log("step", data.step);
+    console.log("temp", data.computeScalars?.ctemp);
+    console.log("ke", data.computeScalars?.cke);
+  },
+  {
+    every: 5,
+    computeScalars: ["ctemp", "cke"],
+  }
+);
+```
+
+## Usage (manual stepping, optional)
+
+```ts
 const lammps = await LammpsClient.create();
 
 lammps.start().runScript(`
@@ -29,31 +105,6 @@ lammps.start().runScript(`
 const particles = lammps.syncParticles({ copy: true });
 console.log(`atoms: ${particles.count}`);
 
-const wrapped = lammps.syncParticles({ wrapped: true, copy: true });
-console.log(`wrapped positions length: ${wrapped.positions.length}`);
-
-lammps.dispose();
-```
-
-Advance the solver (via `advance(stepCount, applyPre?, applyPost?)`) between snapshots to receive new frames.
-
-Advance the solver (`advance(stepCount, applyPre?, applyPost?)`) before sampling to obtain subsequent frames.
-The TypeScript definitions are shipped with the package under
-`types/index.d.ts`, so IDEs receive auto-complete everywhere.
-
-
-### High-level client
-
-For a more ergonomic API, use the helpers in `lammps.js/client`:
-
-```ts
-import { LammpsClient } from "lammps.js/client";
-
-const lammps = await LammpsClient.create();
-await fetch("/in.lj")
-  .then(res => res.text())
-  .then(script => lammps.runInput("in.lj", script));
-
 for (let frame = 0; frame < 10; frame += 1) {
   lammps.advance(1, false, false);
   const { positions, count } = lammps.syncParticles({ copy: true });
@@ -63,41 +114,24 @@ for (let frame = 0; frame < 10; frame += 1) {
 lammps.dispose();
 ```
 
-Advance the solver (via `advance(stepCount, applyPre?, applyPost?)`) between snapshots to receive new frames.
-
-Use `syncParticles({ wrapped: true })` and `syncBonds({ wrapped: true })` to access
-raw periodic coordinates while the default returns minimum-image data, ready for rendering.
-
-Install via npm:
+## Build
 
 ```bash
-npm install lammps.js
+npm run build
 ```
 
-## Building the wasm bundle
+Outputs go straight into `dist/`:
+- `dist/cpp/lammps.js` (single-file wasm module)
+- `dist/client.js`
+- `dist/**/*.d.ts`
 
-```bash
-npm run build:wasm
-```
-
-This calls `cpp/build.py`, which keeps the upstream LAMMPS checkout in
-`cpp/lammps` fresh and emits `cpp/lammps.js` (single-file ES module).
-
-## Test suite
-
-The Vitest suite spins up a jsdom environment, instantiates the wasm module,
-loads a miniature Lennard-Jones sample and validates the public interface.
+## Tests
 
 ```bash
 npm test
 ```
 
-> The build step fetches the LAMMPS sources on first run. Subsequent runs are
-> incremental thanks to the cached checkout and Emscripten cache.
-
-## Examples
-
-A ready-to-run Three.js demo lives in `examples/threejs`:
+## Example
 
 ```bash
 cd examples/threejs
@@ -105,5 +139,4 @@ npm install
 npm run dev
 ```
 
-It links against the local workspace copy of `lammps.js` and renders the
-Lennard-Jones sample (`tests/fixtures/lj.mini.in`).
+It uses `tests/fixtures/lj.mini.in`.
