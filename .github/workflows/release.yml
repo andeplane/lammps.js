@@ -8,6 +8,9 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,8 +47,6 @@ jobs:
 
       - name: Publish package
         if: success()
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           source "$HOME/emsdk/emsdk_env.sh"
-          npm publish --access public
+          npm publish --provenance
