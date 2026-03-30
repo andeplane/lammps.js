@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LAMMPS.js</title>
+    <style>
+      *, *::before, *::after {
+        box-sizing: border-box;
+      }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-family: system-ui, sans-serif;
+      }
+
+      #app {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        padding: 0.875rem 1.5rem;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(6px);
+        box-shadow: 0 4px 30px rgba(15, 23, 42, 0.5);
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+      }
+
+      header h1 code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 1rem;
+        color: #38bdf8;
+      }
+
+      .header-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex: 1;
+        flex-wrap: wrap;
+      }
+
+      select#example-select {
+        background: #1e293b;
+        color: #e2e8f0;
+        border: 1px solid #334155;
+        border-radius: 0.375rem;
+        padding: 0.375rem 0.625rem;
+        font-size: 0.875rem;
+        cursor: pointer;
+        outline: none;
+        min-width: 200px;
+      }
+
+      select#example-select:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+      }
+
+      button#run-btn {
+        background: #3b82f6;
+        color: #fff;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.375rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.15s;
+        white-space: nowrap;
+      }
+
+      button#run-btn:hover {
+        background: #2563eb;
+      }
+
+      button#run-btn:active {
+        background: #1d4ed8;
+      }
+
+      main {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        overflow: hidden;
+      }
+
+      .panel {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border-top: 1px solid #1e293b;
+      }
+
+      .panel:first-child {
+        border-right: 1px solid #1e293b;
+      }
+
+      .panel-label {
+        padding: 0.375rem 1rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        background: #0f172a;
+        border-bottom: 1px solid #1e293b;
+        flex-shrink: 0;
+      }
+
+      pre#lammps-code,
+      pre#console-output {
+        margin: 0;
+        padding: 1rem;
+        flex: 1;
+        overflow: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.8125rem;
+        line-height: 1.6;
+        tab-size: 4;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      pre#lammps-code {
+        color: #cbd5e1;
+        background: #0f172a;
+      }
+
+      pre#console-output {
+        color: #a3e635;
+        background: #020617;
+      }
+
+      footer {
+        padding: 0.5rem 1.5rem;
+        font-size: 0.75rem;
+        color: #475569;
+        text-align: end;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(6px);
+        border-top: 1px solid #1e293b;
+      }
+
+      a {
+        color: #38bdf8;
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1><code>LAMMPS.js</code></h1>
+        <div class="header-controls">
+          <select id="example-select"></select>
+          <button id="run-btn">Run</button>
+        </div>
+      </header>
+      <main>
+        <div class="panel">
+          <div class="panel-label">Input</div>
+          <pre id="lammps-code"></pre>
+        </div>
+        <div class="panel">
+          <div class="panel-label">Output</div>
+          <pre id="console-output"></pre>
+        </div>
+      </main>
+      <footer>
+        <a href="https://github.com/lammps/lammps.js" target="_blank" rel="noopener">GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://www.npmjs.com/package/lammps.js" target="_blank" rel="noopener">npm</a>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
