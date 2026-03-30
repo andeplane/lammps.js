@@ -59,6 +59,7 @@ jobs:
       - name: Build & test
         run: |
           source "$HOME/emsdk/emsdk_env.sh"
+          export EMSDK_PATH="$HOME/emsdk"
           npm test
 
       - name: Publish package
