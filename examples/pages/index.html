@@ -126,7 +126,7 @@
         flex-shrink: 0;
       }
 
-      pre#lammps-code,
+      textarea#lammps-code,
       pre#console-output {
         margin: 0;
         padding: 1rem;
@@ -140,9 +140,17 @@
         word-break: break-word;
       }
 
-      pre#lammps-code {
+      textarea#lammps-code {
         color: #cbd5e1;
         background: #0f172a;
+        border: none;
+        outline: none;
+        resize: none;
+        width: 100%;
+      }
+
+      textarea#lammps-code:focus {
+        background: #131c33;
       }
 
       pre#console-output {
@@ -181,8 +189,8 @@
       </header>
       <main>
         <div class="panel">
-          <div class="panel-label">Input</div>
-          <pre id="lammps-code"></pre>
+          <div class="panel-label">Input (editable)</div>
+          <textarea id="lammps-code" spellcheck="false"></textarea>
         </div>
         <div class="panel">
           <div class="panel-label">Output</div>

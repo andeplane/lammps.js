@@ -4,7 +4,7 @@ import { examples } from "./examples";
 // Get DOM elements
 const selectEl = document.getElementById("example-select") as HTMLSelectElement;
 const runBtn = document.getElementById("run-btn") as HTMLButtonElement;
-const codeEl = document.getElementById("lammps-code") as HTMLPreElement;
+const codeEl = document.getElementById("lammps-code") as HTMLTextAreaElement;
 const outputEl = document.getElementById("console-output") as HTMLPreElement;
 
 // Populate dropdown
@@ -15,9 +15,9 @@ examples.forEach((ex, i) => {
   selectEl.appendChild(opt);
 });
 
-// Show code for selected example
+// Show code for selected example (editable — running uses the textarea contents)
 function showExample(index: number) {
-  codeEl.textContent = examples[index].script;
+  codeEl.value = examples[index].script;
 }
 showExample(0);
 
@@ -58,8 +58,7 @@ runBtn.addEventListener("click", async () => {
   stopRequested = false;
   setRunning(true);
 
-  const index = Number(selectEl.value);
-  const script = examples[index].script;
+  const script = codeEl.value;
 
   try {
     client = await LammpsClient.create({
