@@ -97,6 +97,26 @@ describe("installLammpsWorker", () => {
     expect(host.mocks.start).toHaveBeenCalledTimes(1);
   });
 
+  it("forwards kokkos options from init to the client factory", async () => {
+    const { scope, posted, dispatch } = createScope();
+    const mocks = createClientMocks();
+    const createClient = vi.fn(async () => {
+      const clientMock: Partial<LammpsClient> = mocks;
+      return clientMock as unknown as LammpsClient;
+    });
+
+    installLammpsWorker(scope, { createClient });
+    dispatch({ id: 1, type: "init", kokkos: { threads: 4 } });
+
+    await vi.waitFor(() => {
+      expect(posted).toContainEqual({ type: "response", id: 1, ok: true, result: undefined });
+    });
+    expect(createClient).toHaveBeenCalledWith(expect.anything(), {
+      workdir: undefined,
+      kokkos: { threads: 4 }
+    });
+  });
+
   it("rejects requests before initialization", async () => {
     const { scope, posted, dispatch } = createScope();
     installLammpsWorker(scope, {

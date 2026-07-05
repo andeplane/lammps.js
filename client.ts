@@ -1,4 +1,3 @@
-import createModule from "./cpp/lammps.js";
 import { LammpsWorkerClient } from "./worker-client.js";
 
 import type { LammpsWorkerClientOptions, WorkerLike } from "./worker-client.js";
@@ -74,6 +73,20 @@ export interface SyncBoxOptions {
   copy?: boolean;
 }
 
+export interface KokkosOptions {
+  /**
+   * Number of Kokkos threads. Defaults to the hardware concurrency
+   * reported by the environment, capped at 8 (the pthread pool size the
+   * KOKKOS wasm module is built with).
+   */
+  threads?: number;
+  /**
+   * Apply the kk accelerator suffix to all styles (`-sf kk`), so plain
+   * scripts run their Kokkos variants automatically. Default true.
+   */
+  suffix?: boolean;
+}
+
 export interface LammpsClientOptions {
   workdir?: string;
   /**
@@ -87,6 +100,38 @@ export interface LammpsClientOptions {
   worker?: boolean | WorkerLike;
   /** Worker mode only: receives failures from fire-and-forget commands. */
   onError?: (error: Error) => void;
+  /**
+   * Use the multi-threaded KOKKOS wasm build (dist/cpp/lammps-kokkos.js).
+   * Requires a cross-origin isolated context in browsers
+   * (SharedArrayBuffer). `true` uses default options.
+   */
+  kokkos?: boolean | KokkosOptions;
+}
+
+const KOKKOS_MAX_THREADS = 8;
+
+function resolveKokkosOptions(value: boolean | KokkosOptions | undefined): KokkosOptions | null {
+  if (!value) {
+    return null;
+  }
+  return value === true ? {} : value;
+}
+
+function defaultKokkosThreads(): number {
+  const hardware =
+    typeof navigator !== "undefined" && Number.isFinite(navigator.hardwareConcurrency)
+      ? navigator.hardwareConcurrency
+      : 4;
+  return Math.min(Math.max(1, hardware), KOKKOS_MAX_THREADS);
+}
+
+function kokkosStartArgs(options: KokkosOptions): string[] {
+  const threads = Math.min(Math.max(1, options.threads ?? defaultKokkosThreads()), KOKKOS_MAX_THREADS);
+  const args = ["-k", "on", "t", String(threads)];
+  if (options.suffix !== false) {
+    args.push("-sf", "kk");
+  }
+  return args;
 }
 
 export interface ParticleArrays {
@@ -159,7 +204,9 @@ function viewToTyped(
   }
   const heap = heaps.get(view.type) ?? module.HEAPF32;
   const shift = shifts.get(view.type) ?? 2;
-  const start = view.ptr >> shift;
+  // Divide instead of >>: bitwise ops truncate to 32 bits, which corrupts
+  // pointers above 2GB (possible with memory growth, and in KOKKOS builds).
+  const start = view.ptr / (1 << shift);
   const typed = heap.subarray(start, start + view.length);
   return copy ? typed.slice() : typed;
 }
@@ -195,6 +242,7 @@ export class LammpsClient {
   readonly _heaps: Map<number, HeapView>;
   readonly _shifts: Map<number, number>;
   readonly #managedAsyncFixIds: Set<string>;
+  readonly #kokkos: KokkosOptions | null;
 
   constructor(module: LammpsModule, instance: LAMMPSWeb, options: LammpsClientOptions = {}) {
     this.module = module;
@@ -203,6 +251,7 @@ export class LammpsClient {
     this._heaps = buildHeapMap(module);
     this._shifts = buildShiftMap(module);
     this.#managedAsyncFixIds = new Set<string>();
+    this.#kokkos = resolveKokkosOptions(options.kokkos);
 
     try {
       module.FS.mkdir(this.workdir);
@@ -227,13 +276,22 @@ export class LammpsClient {
     if (clientOptions.worker) {
       return createWorkerBackedClient(moduleOptions, clientOptions, clientOptions.worker);
     }
-    const module = await createModule(moduleOptions);
+    // Both wasm modules are imported lazily so that consumers (and CI
+    // variants) only need the artifact they actually use.
+    const factory = clientOptions.kokkos
+      ? (await import("./cpp/lammps-kokkos.js")).default
+      : (await import("./cpp/lammps.js")).default;
+    const module = await factory(moduleOptions);
     const instance = new module.LAMMPSWeb();
     return new LammpsClient(module, instance, clientOptions);
   }
 
   start(): this {
-    this.instance.start();
+    if (this.#kokkos) {
+      this.instance.startWithArgs(kokkosStartArgs(this.#kokkos));
+    } else {
+      this.instance.start();
+    }
     return this;
   }
 
@@ -414,11 +472,11 @@ export class LammpsClient {
     const waiter = (promise: Promise<unknown>, donePtr: number, errPtr: number) => {
       promise.then(
         () => {
-          module.HEAP32[donePtr >> 2] = 1;
+          module.HEAP32[donePtr / 4] = 1;
         },
         (err) => {
-          module.HEAP32[errPtr >> 2] = 1;
-          module.HEAP32[donePtr >> 2] = 1;
+          module.HEAP32[errPtr / 4] = 1;
+          module.HEAP32[donePtr / 4] = 1;
           module.__lammpsAsyncError = err;
         }
       );
@@ -475,7 +533,8 @@ async function createWorkerBackedClient(
 
   const options: LammpsWorkerClientOptions = {
     workdir: clientOptions.workdir,
-    onError: clientOptions.onError
+    onError: clientOptions.onError,
+    kokkos: clientOptions.kokkos
   };
   if (print || printErr) {
     options.onOutput = (stream, text) => {
@@ -507,11 +566,16 @@ export async function createLammps(
   }
   return LammpsClient.create(moduleOptions, {
     workdir: clientOptions.workdir,
-    onError: clientOptions.onError
+    onError: clientOptions.onError,
+    kokkos: clientOptions.kokkos
   });
 }
 
-export { createModule };
+/** Loads the serial wasm module. Lazy: the module file is only fetched on call. */
+export async function createModule(options: ModuleOptions = {}): Promise<LammpsModule> {
+  const factory = (await import("./cpp/lammps.js")).default;
+  return factory(options);
+}
 export { LammpsWorkerClient } from "./worker-client.js";
 export type { WorkerLike, LammpsWorkerClientOptions } from "./worker-client.js";
 export type {

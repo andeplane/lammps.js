@@ -16,6 +16,8 @@ Environment variables:
     LAMMPS_TAG    - Git tag/branch for LAMMPS (default: patch_10Sep2025)
     PACKAGES      - Space-separated list of LAMMPS packages (default: MOLECULE)
     SINGLE_FILE   - Set to "0" to output separate .wasm file (default: "1")
+    KOKKOS        - Set to "1" to build the KOKKOS (pthreads) variant,
+                    emitted as dist/cpp/lammps-kokkos.js
 """
 
 import os
@@ -28,11 +30,15 @@ from pathlib import Path
 LAMMPS_TAG = os.environ.get("LAMMPS_TAG", "patch_10Sep2025")
 PACKAGES = os.environ.get("PACKAGES", "MOLECULE").split()
 SINGLE_FILE = os.environ.get("SINGLE_FILE", "1") == "1"
+KOKKOS = os.environ.get("KOKKOS", "0") == "1"
 
 BASE_DIR = Path(__file__).resolve().parent
 LAMMPS_DIR = BASE_DIR / "lammps"
 SRC_DIR = LAMMPS_DIR / "src"
-BUILD_DIR = BASE_DIR / "build_emscripten"
+BUILD_DIR = BASE_DIR / ("build_emscripten_kokkos" if KOKKOS else "build_emscripten")
+
+# KOKKOS needs 64-bit pointers (MEMORY64=2 keeps a wasm32 binary) and pthreads.
+KOKKOS_CC_FLAGS = "-pthread -sMEMORY64=2"
 
 # Custom source files to copy into LAMMPS
 CUSTOM_BASENAMES = ["lammpsweb", "fix_js_async"]
@@ -133,19 +139,22 @@ def configure_cmake(emsdk_env: str, debug_mode: bool = False) -> None:
         sys.exit(f"ERROR: CMake source directory not found: {cmake_source_abs}")
     
     # Build package flags
-    package_flags = [f"-DPKG_{pkg}=ON" for pkg in PACKAGES]
-    print(f"Enabling packages: {', '.join(PACKAGES)}")
-    
+    packages = PACKAGES + (["KOKKOS"] if KOKKOS and "KOKKOS" not in PACKAGES else [])
+    package_flags = [f"-DPKG_{pkg}=ON" for pkg in packages]
+    print(f"Enabling packages: {', '.join(packages)}")
+
     # Compiler flags
     cc_flags_common = "-DLAMMPS_EXCEPTIONS -s NO_DISABLE_EXCEPTION_CATCHING=1"
-    
+    if KOKKOS:
+        cc_flags_common = f"{KOKKOS_CC_FLAGS} {cc_flags_common}"
+
     if debug_mode:
         cc_flags = f"-O0 -gsource-map {cc_flags_common}"
         build_type = "Debug"
     else:
         cc_flags = f"-Oz -DNDEBUG -flto {cc_flags_common}"
         build_type = "Release"
-    
+
     cmake_args = [
         "emcmake", "cmake",
         cmake_source,
@@ -157,6 +166,13 @@ def configure_cmake(emsdk_env: str, debug_mode: bool = False) -> None:
         f'-DCMAKE_CXX_FLAGS="{cc_flags}"',
         f'-DCMAKE_C_FLAGS="{cc_flags}"',
     ] + package_flags
+
+    if KOKKOS:
+        cmake_args += [
+            "-DKokkos_ENABLE_THREADS=ON",
+            "-DKokkos_ENABLE_LIBDL=OFF",  # no dynamic loading in WebAssembly
+            "-DKokkos_ENABLE_DEPRECATION_WARNINGS=OFF",
+        ]
     
     # Create build directory
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
@@ -191,9 +207,10 @@ def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
     
     lib_abs_path = lib_path.resolve()
     locate_file_abs = (BASE_DIR / "locateFile.js").resolve()
-    
+
     # Output file - must land in dist/cpp/ so that dist/client.js can import ./cpp/lammps.js
-    output_file = BASE_DIR.parent / "dist" / "cpp" / "lammps.js"
+    output_name = "lammps-kokkos.js" if KOKKOS else "lammps.js"
+    output_file = BASE_DIR.parent / "dist" / "cpp" / output_name
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Build emcc arguments
@@ -213,18 +230,26 @@ def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
     
     # Environment - support web, worker, and node
     emcc_args.extend(["-s", "ENVIRONMENT=web,worker,node"])
-    
+
     # Exception handling
     emcc_args.extend(["-s", "NO_DISABLE_EXCEPTION_CATCHING=1"])
-    
+
     # Memory settings
     emcc_args.extend([
         "-s", "ALLOW_MEMORY_GROWTH=1",
         "-s", "INITIAL_MEMORY=256MB",
     ])
-    
+
     # Async support
     emcc_args.extend(["-s", "ASYNCIFY"])
+
+    if KOKKOS:
+        emcc_args.extend([
+            "-pthread",
+            "-s", "MEMORY64=2",
+            "-s", "MAXIMUM_MEMORY=4GB",  # required for memory growth with shared memory
+            "-s", "PTHREAD_POOL_SIZE=8",
+        ])
     
     # Module settings
     emcc_args.extend([
@@ -258,6 +283,14 @@ def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
         str(lib_abs_path),
         "-Wl,--no-whole-archive",
     ])
+
+    # The KOKKOS build produces separate Kokkos static libraries that
+    # liblammps.a depends on (regular archive linking is enough for these).
+    if KOKKOS:
+        kokkos_libs = sorted(BUILD_DIR.glob("lib/kokkos/**/*.a"))
+        if not kokkos_libs:
+            sys.exit("ERROR: Kokkos libraries not found in build directory")
+        emcc_args.extend(str(lib.resolve()) for lib in kokkos_libs)
     
     # Output file
     emcc_args.extend(["-o", str(output_file)])

@@ -15,6 +15,7 @@
     "worker-host.ts",
     "worker-protocol.ts",
     "cpp/lammps.d.ts",
+    "cpp/lammps-kokkos.d.ts",
     "types/**/*.d.ts"
   ]
 }

@@ -14,6 +14,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <emscripten.h>
 
@@ -92,9 +93,11 @@ bool invokeStepCallbackAndWait(std::int32_t step) {
 
   int done = 0;
   int failed = 0;
+  // Pass addresses as doubles so they arrive as plain JS numbers in both
+  // wasm32 and MEMORY64 builds (uintptr_t would marshal as BigInt there).
   g_promise_waiter(result,
-                   emscripten::val(reinterpret_cast<std::uintptr_t>(&done)),
-                   emscripten::val(reinterpret_cast<std::uintptr_t>(&failed)));
+                   emscripten::val(static_cast<double>(reinterpret_cast<std::uintptr_t>(&done))),
+                   emscripten::val(static_cast<double>(reinterpret_cast<std::uintptr_t>(&failed))));
   while (!done) {
     emscripten_sleep(kAsyncSleepMs);
   }
@@ -116,12 +119,28 @@ LAMMPSWeb::~LAMMPSWeb() {
 }
 
 void LAMMPSWeb::start() {
+  startWithArgs({});
+}
+
+void LAMMPSWeb::startWithArgs(const std::vector<std::string> &extraArgs) {
   if (hasSimulation()) {
     stop();
   }
 
+  // lammps_open_no_mpi expects a full argv, including the program name.
+  std::vector<std::string> args;
+  args.reserve(extraArgs.size() + 1);
+  args.emplace_back("lammps.js");
+  args.insert(args.end(), extraArgs.begin(), extraArgs.end());
+
+  std::vector<char *> argv;
+  argv.reserve(args.size());
+  for (auto &arg : args) {
+    argv.push_back(arg.data());
+  }
+
   auto *instance = static_cast<LAMMPS_NS::LAMMPS *>(
-    lammps_open_no_mpi(0, nullptr, nullptr)
+    lammps_open_no_mpi(static_cast<int>(argv.size()), argv.data(), nullptr)
   );
 
   if (!instance) {
@@ -209,6 +228,10 @@ bool LAMMPSWeb::isReady() const noexcept {
   return hasSimulation();
 }
 
+bool LAMMPSWeb::hasPackage(const std::string &name) const noexcept {
+  return lammps_config_has_package(name.c_str()) != 0;
+}
+
 bool LAMMPSWeb::getIsRunning() const noexcept {
   const auto *sim = raw();
   return sim && sim->update && sim->update->whichflag != 0;
@@ -276,6 +299,17 @@ EMSCRIPTEN_BINDINGS(lammps_web_module) {
   emscripten::class_<LAMMPSWeb>("LAMMPSWeb")
     .constructor<>()
     .function("start", &LAMMPSWeb::start)
+    .function(
+      "startWithArgs",
+      emscripten::optional_override([](LAMMPSWeb &self, emscripten::val args) {
+        if (args.isUndefined() || args.isNull()) {
+          self.startWithArgs({});
+          return;
+        }
+        self.startWithArgs(emscripten::vecFromJSArray<std::string>(args));
+      })
+    )
+    .function("hasPackage", &LAMMPSWeb::hasPackage)
     .function("stop", &LAMMPSWeb::stop)
     .function(
       "advance",

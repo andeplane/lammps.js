@@ -37,6 +37,10 @@ export interface BoxSnapshot {
 
 export interface LAMMPSWeb {
   start(): void;
+  /** Start LAMMPS with extra command-line arguments (e.g. ["-k", "on", "t", "4", "-sf", "kk"]). */
+  startWithArgs(args?: string[] | null): void;
+  /** Whether the wasm build includes a given LAMMPS package (e.g. "KOKKOS"). */
+  hasPackage(name: string): boolean;
   stop(): void;
   advance(steps: number, applyPre?: boolean, applyPost?: boolean): void;
   runCommand(command: string): void;

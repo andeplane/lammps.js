@@ -1,3 +1,4 @@
+import type { KokkosOptions } from "./client.js";
 import type {
   LammpsWorkerRequest,
   LammpsWorkerRequestBody,
@@ -22,6 +23,8 @@ export interface LammpsWorkerClientOptions {
   onOutput?: (stream: "stdout" | "stderr", text: string) => void;
   /** Receives failures from fire-and-forget commands (runCommand, writeFile, …). */
   onError?: (error: Error) => void;
+  /** Use the multi-threaded KOKKOS wasm build inside the worker. */
+  kokkos?: boolean | KokkosOptions;
 }
 
 interface PendingRequest {
@@ -65,7 +68,7 @@ export class LammpsWorkerClient {
     ownsWorker = false
   ): Promise<LammpsWorkerClient> {
     const client = new LammpsWorkerClient(worker, options, ownsWorker);
-    await client.#request({ type: "init", workdir: options.workdir });
+    await client.#request({ type: "init", workdir: options.workdir, kokkos: options.kokkos });
     return client;
   }
 

@@ -44,8 +44,8 @@ jobs:
             git clone https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
           fi
           cd "$HOME/emsdk"
-          ./emsdk install 3.1.51
-          ./emsdk activate 3.1.51
+          ./emsdk install $(cat "$GITHUB_WORKSPACE/emsdk_manifest.txt")
+          ./emsdk activate $(cat "$GITHUB_WORKSPACE/emsdk_manifest.txt")
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -61,6 +61,14 @@ jobs:
           source "$HOME/emsdk/emsdk_env.sh"
           export EMSDK_PATH="$HOME/emsdk"
           npm test
+
+      # The published package ships both wasm variants; build KOKKOS after
+      # the serial build so dist/ contains dist/cpp/lammps-kokkos.js too.
+      - name: Build & test KOKKOS variant
+        run: |
+          source "$HOME/emsdk/emsdk_env.sh"
+          export EMSDK_PATH="$HOME/emsdk"
+          npm run test:kokkos
 
       - name: Publish package
         if: success() && steps.version_check.outputs.changed == 'true'

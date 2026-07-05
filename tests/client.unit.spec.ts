@@ -10,7 +10,7 @@ import type {
   ParticleSnapshot
 } from "../types";
 import { LammpsClient } from "../dist/client.js";
-import type { AsyncStepData } from "../dist/client.js";
+import type { AsyncStepData, LammpsClientOptions } from "../dist/client.js";
 
 const Scalar = {
   Float32: 0,
@@ -69,6 +69,7 @@ interface InstanceMockResult {
   instanceMock: Partial<LAMMPSWeb>;
   mocks: {
     start: Mock;
+    startWithArgs: Mock;
     stop: Mock;
     advance: Mock;
     runCommand: Mock;
@@ -90,6 +91,7 @@ interface InstanceMockResult {
 function createInstanceMock(overrides: Partial<LAMMPSWeb> = {}): InstanceMockResult {
   const mocks = {
     start: vi.fn(),
+    startWithArgs: vi.fn(),
     stop: vi.fn(),
     advance: vi.fn(),
     runCommand: vi.fn(),
@@ -114,7 +116,7 @@ function createInstanceMock(overrides: Partial<LAMMPSWeb> = {}): InstanceMockRes
 function createClient(
   moduleMock: Partial<LammpsModule>,
   instanceMock: Partial<LAMMPSWeb>,
-  options: { workdir?: string } = {}
+  options: LammpsClientOptions = {}
 ): LammpsClient {
   return new LammpsClient(
     moduleMock as unknown as LammpsModule,
@@ -182,6 +184,29 @@ describe("LammpsClient lifecycle and delegation", () => {
     expect(client.stop()).toBe(client);
     expect(mocks.start).toHaveBeenCalledTimes(1);
     expect(mocks.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("start() with kokkos options uses startWithArgs", () => {
+    const { moduleMock } = createModuleMock();
+    const { instanceMock, mocks } = createInstanceMock();
+    const client = createClient(moduleMock, instanceMock, { kokkos: { threads: 4 } });
+
+    client.start();
+
+    expect(mocks.start).not.toHaveBeenCalled();
+    expect(mocks.startWithArgs).toHaveBeenCalledWith(["-k", "on", "t", "4", "-sf", "kk"]);
+  });
+
+  it("clamps kokkos threads to the pthread pool size and honors suffix: false", () => {
+    const { moduleMock } = createModuleMock();
+    const { instanceMock, mocks } = createInstanceMock();
+    const client = createClient(moduleMock, instanceMock, {
+      kokkos: { threads: 32, suffix: false }
+    });
+
+    client.start();
+
+    expect(mocks.startWithArgs).toHaveBeenCalledWith(["-k", "on", "t", "8"]);
   });
 
   it("dispose stops the instance", () => {

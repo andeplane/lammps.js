@@ -17,7 +17,8 @@
       "types": "./dist/worker.d.ts",
       "default": "./dist/worker.js"
     },
-    "./wasm": "./dist/cpp/lammps.js"
+    "./wasm": "./dist/cpp/lammps.js",
+    "./wasm-kokkos": "./dist/cpp/lammps-kokkos.js"
   },
   "types": "./dist/types/index.d.ts",
   "files": [
@@ -28,10 +29,13 @@
   ],
   "scripts": {
     "build:wasm": "python3 cpp/build.py",
+    "build:wasm:kokkos": "KOKKOS=1 python3 cpp/build.py",
     "build:dist": "tsc -p tsconfig.build.json && npm run copy:types",
-    "copy:types": "mkdir -p dist/types dist/cpp && cp types/index.d.ts types/client.d.ts dist/types/ && cp cpp/lammps.d.ts dist/cpp/",
+    "copy:types": "mkdir -p dist/types dist/cpp && cp types/index.d.ts types/client.d.ts dist/types/ && cp cpp/lammps.d.ts cpp/lammps-kokkos.d.ts dist/cpp/ && node scripts/ensure-kokkos-stub.mjs",
     "build": "npm run build:wasm && npm run build:dist",
+    "build:kokkos": "npm run build:wasm:kokkos && npm run build:dist",
     "test": "npm run build && vitest run",
+    "test:kokkos": "npm run build:kokkos && vitest run tests/kokkos.spec.ts",
     "test:watch": "vitest watch"
   },
   "devDependencies": {

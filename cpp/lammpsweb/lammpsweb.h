@@ -15,7 +15,9 @@
 
 class LAMMPSWeb {
 public:
-  using pointer_type = std::intptr_t;
+  // Pointers are exposed to JS as doubles: exact up to 2^53, and unlike a
+  // 64-bit integer type they marshal as a plain JS number under MEMORY64.
+  using pointer_type = double;
 
   enum class ScalarType : std::uint8_t {
     Float32,
@@ -59,6 +61,7 @@ public:
   ~LAMMPSWeb();
 
   void start();
+  void startWithArgs(const std::vector<std::string> &extraArgs);
   void stop();
 
   void advance(std::int32_t steps = 1, bool applyPre = false, bool applyPost = false);
@@ -69,6 +72,7 @@ public:
   bool setAsyncStepFrequency(const std::string &fixId, std::int32_t every);
 
   [[nodiscard]] bool isReady() const noexcept;
+  [[nodiscard]] bool hasPackage(const std::string &name) const noexcept;
   [[nodiscard]] bool getIsRunning() const noexcept;
   [[nodiscard]] double getCurrentStep() const noexcept;
   [[nodiscard]] double getTimestepSize() const noexcept;
@@ -90,18 +94,21 @@ private:
   ParticleSnapshot captureParticles(bool wrapped);
   BondSnapshot captureBonds(bool wrapped);
 
+  static pointer_type toPointer(const void *ptr) noexcept {
+    return static_cast<pointer_type>(reinterpret_cast<std::uintptr_t>(ptr));
+  }
+
   template <typename Container>
   static pointer_type pointerFrom(Container &buffer) noexcept {
-    using ValueType = typename Container::value_type;
     if (buffer.empty()) {
       return 0;
     }
-    return reinterpret_cast<pointer_type>(buffer.data());
+    return toPointer(buffer.data());
   }
 
   template <typename T, std::size_t N>
   static pointer_type pointerFrom(std::array<T, N> &buffer) noexcept {
-    return reinterpret_cast<pointer_type>(buffer.data());
+    return toPointer(buffer.data());
   }
 
   template <typename Container>
@@ -123,7 +130,7 @@ private:
     if (!ptr || count == 0 || components == 0) {
       return view;
     }
-    view.ptr = reinterpret_cast<pointer_type>(ptr);
+    view.ptr = toPointer(ptr);
     view.length = count * components;
     view.components = components;
     view.type = type;

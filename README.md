@@ -135,14 +135,77 @@ const lammps = await LammpsClient.create({}, { worker });
 transferred `ArrayBuffer`s, which works everywhere Web Workers do, with no
 special headers.
 
-`SharedArrayBuffer` only becomes relevant for future **multithreaded**
-builds (Emscripten pthreads / KOKKOS). If that lands, pages will need to be
-[cross-origin isolated](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements):
-served with `Cross-Origin-Opener-Policy: same-origin` and
-`Cross-Origin-Embedder-Policy: require-corp`. Hosts that can't set response
-headers — like GitHub Pages — can enable it with the
+`SharedArrayBuffer` is only required for the **multithreaded KOKKOS
+build** (see below).
+
+## Usage (multithreaded, KOKKOS)
+
+The package also ships a KOKKOS-enabled wasm build
+(`dist/cpp/lammps-kokkos.js`) that runs LAMMPS Kokkos styles across
+multiple pthreads. Opt in with the `kokkos` client option — it combines
+with `worker: true`:
+
+```ts
+const lammps = await LammpsClient.create(
+  {},
+  { worker: true, kokkos: { threads: 4 } }
+);
+```
+
+- `kokkos: true` picks a thread count from `navigator.hardwareConcurrency`
+  (capped at 8, the module's pthread pool size).
+- LAMMPS starts with `-k on t <threads> -sf kk`, so plain scripts
+  automatically use the accelerated `/kk` styles where they exist. Pass
+  `suffix: false` to manage suffixes yourself.
+- Typical speedups (13,500-atom Lennard-Jones melt, M-series MacBook):
+  ~1.8× on 2 threads, ~3× on 4, ~4.4× on 8.
+
+### Required headers (browsers only)
+
+SharedArrayBuffer — and therefore the KOKKOS build — only works on pages
+that are
+[cross-origin isolated](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements).
+Node needs no setup. If you control the server, send these two response
+headers:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+For example, with vite:
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp"
+    }
+  }
+});
+```
+
+If your host can't set response headers — GitHub Pages, most static
+hosting — install the
 [coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker) shim,
-which injects those headers from a service worker.
+which injects the headers from a service worker (the page reloads once on
+first visit):
+
+```bash
+npm install coi-serviceworker
+cp node_modules/coi-serviceworker/coi-serviceworker.min.js <your-static-files-dir>/
+```
+
+```html
+<!-- Must be served from your own origin and loaded before your app code;
+     it cannot be bundled or loaded from a CDN. -->
+<script src="coi-serviceworker.min.js"></script>
+```
+
+You can check `crossOriginIsolated` in the browser console — when it is
+`true`, the KOKKOS build will work.
 
 ## Usage (manual stepping, optional)
 
@@ -177,18 +240,21 @@ lammps.dispose();
 ## Build
 
 ```bash
-npm run build
+npm run build          # serial wasm module + TypeScript
+npm run build:kokkos   # multithreaded KOKKOS wasm module + TypeScript
 ```
 
 Outputs go straight into `dist/`:
 - `dist/cpp/lammps.js` (single-file wasm module)
+- `dist/cpp/lammps-kokkos.js` (single-file KOKKOS/pthreads wasm module)
 - `dist/client.js`
 - `dist/**/*.d.ts`
 
 ## Tests
 
 ```bash
-npm test
+npm test               # serial build + full suite
+npm run test:kokkos    # KOKKOS build + KOKKOS suite
 ```
 
 ## Example

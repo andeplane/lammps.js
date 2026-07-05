@@ -1,4 +1,4 @@
-import type { AsyncStepData } from "./client.js";
+import type { AsyncStepData, KokkosOptions } from "./client.js";
 
 export interface WorkerParticleData {
   count: number;
@@ -42,7 +42,7 @@ export interface WorkerRunResult {
 }
 
 export type LammpsWorkerRequest =
-  | { id: number; type: "init"; workdir?: string }
+  | { id: number; type: "init"; workdir?: string; kokkos?: boolean | KokkosOptions }
   | { id: number; type: "runCommand"; command: string }
   | { id: number; type: "runScript"; script: string }
   | { id: number; type: "runScriptAsync"; script: string; options: WorkerRunOptions }
