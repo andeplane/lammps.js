@@ -458,20 +458,19 @@ LAMMPSWeb::BondSnapshot LAMMPSWeb::captureBonds(bool wrapped) {
       m_bondsPosition1.push_back(static_cast<float>(first[1]));
       m_bondsPosition1.push_back(static_cast<float>(first[2]));
 
-      if (wrapped) {
-        m_bondsPosition2.push_back(static_cast<float>(second[0]));
-        m_bondsPosition2.push_back(static_cast<float>(second[1]));
-        m_bondsPosition2.push_back(static_cast<float>(second[2]));
-      } else {
-        double dx = second[0] - first[0];
-        double dy = second[1] - first[1];
-        double dz = second[2] - first[2];
-        applyMinimumImage(domain, dx, dy, dz);
+      // In wrapped mode the two endpoints can sit on opposite sides of a
+      // periodic boundary; without the minimum-image correction such a bond
+      // is drawn across the whole box. Unwrapped positions are continuous so
+      // the correction is a no-op there (bond lengths are far below half the
+      // box), which lets both modes share it.
+      double dx = second[0] - first[0];
+      double dy = second[1] - first[1];
+      double dz = second[2] - first[2];
+      applyMinimumImage(domain, dx, dy, dz);
 
-        m_bondsPosition2.push_back(static_cast<float>(first[0] + dx));
-        m_bondsPosition2.push_back(static_cast<float>(first[1] + dy));
-        m_bondsPosition2.push_back(static_cast<float>(first[2] + dz));
-      }
+      m_bondsPosition2.push_back(static_cast<float>(first[0] + dx));
+      m_bondsPosition2.push_back(static_cast<float>(first[1] + dy));
+      m_bondsPosition2.push_back(static_cast<float>(first[2] + dz));
     }
   }
 
