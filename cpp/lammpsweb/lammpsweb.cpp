@@ -243,6 +243,19 @@ void LAMMPSWeb::setAsyncStepCallback(emscripten::val callback, emscripten::val w
   LAMMPSWebAsync::setPromiseWaiter(waiter);
 }
 
+void LAMMPSWeb::installAsyncFix(const std::string &fixId, std::int32_t every) {
+  auto *sim = raw();
+  if (!sim || fixId.empty() || every <= 0) {
+    return;
+  }
+  if (setAsyncStepFrequency(fixId, every)) {
+    return;  // already installed; just retune
+  }
+  const std::string command = "fix " + fixId + " all js/async " + std::to_string(every) + "\n";
+  lammps_commands_string(static_cast<void *>(sim), command.c_str());
+  throwIfLammpsError();
+}
+
 bool LAMMPSWeb::setAsyncStepFrequency(const std::string &fixId, std::int32_t every) {
   if (every <= 0) {
     return false;
@@ -420,6 +433,7 @@ EMSCRIPTEN_BINDINGS(lammps_web_module) {
     .function("runFile", &LAMMPSWeb::runFile)
     .function("setAsyncStepCallback", &LAMMPSWeb::setAsyncStepCallback)
     .function("setAsyncStepFrequency", &LAMMPSWeb::setAsyncStepFrequency)
+    .function("installAsyncFix", &LAMMPSWeb::installAsyncFix)
     .function("isReady", &LAMMPSWeb::isReady)
     .function("getIsRunning", &LAMMPSWeb::getIsRunning)
     .function("getLastErrorMessage", &LAMMPSWeb::getLastErrorMessage)

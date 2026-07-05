@@ -38,32 +38,6 @@ function hasActiveAsyncFixBeforeIndex(lines: string[], fixId: string, index: num
   return active;
 }
 
-function hasUnfixAfterIndex(lines: string[], fixId: string, index: number): boolean {
-  if (index < 0) {
-    return false;
-  }
-  const escapedId = escapeRegex(fixId);
-  const pattern = new RegExp(`^\\s*unfix\\s+${escapedId}(\\s|$)`, "m");
-  for (let i = index + 1; i < lines.length; i += 1) {
-    if (pattern.test(lines[i])) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function injectAsyncFix(script: string, every: number, fixId: string): string {
-  const trimmed = script.trimEnd();
-  const lines = trimmed.split("\n");
-  const hookIndex = findFirstRunOrMinimizeIndex(lines);
-  if (hookIndex === -1) {
-    return script.endsWith("\n") ? script : `${script}\n`;
-  }
-
-  lines.splice(hookIndex, 0, `fix ${fixId} all js/async ${every}`);
-  return `${lines.join("\n")}\n`;
-}
-
 export interface SyncOptions {
   wrapped?: boolean;
   copy?: boolean;
@@ -238,7 +212,6 @@ export class LammpsClient {
   readonly workdir: string;
 
   readonly _shifts: Map<number, number>;
-  readonly #managedAsyncFixIds: Set<string>;
   readonly #kokkos: KokkosOptions | null;
 
   constructor(module: LammpsModule, instance: LAMMPSWeb, options: LammpsClientOptions = {}) {
@@ -246,7 +219,6 @@ export class LammpsClient {
     this.instance = instance;
     this.workdir = options.workdir ?? DEFAULT_WORKDIR;
     this._shifts = buildShiftMap(module);
-    this.#managedAsyncFixIds = new Set<string>();
     this.#kokkos = resolveKokkosOptions(options.kokkos);
 
     try {
@@ -341,29 +313,29 @@ export class LammpsClient {
     const normalizedScript = script.endsWith("\n") ? script : `${script}\n`;
     const scriptLines = normalizedScript.trimEnd().split("\n");
     const hookIndex = findFirstRunOrMinimizeIndex(scriptLines);
-    const hasHook = hookIndex !== -1;
-    const definesFix = hasActiveAsyncFixBeforeIndex(scriptLines, fixId, hookIndex);
-    const unfixesFix = hasUnfixAfterIndex(scriptLines, fixId, hookIndex);
-    let injectedFix = false;
+    const definesFix = hasActiveAsyncFixBeforeIndex(
+      scriptLines,
+      fixId,
+      hookIndex === -1 ? scriptLines.length : hookIndex
+    );
 
-    let wrappedScript = normalizedScript;
-    if (hasHook && !definesFix) {
-      if (this.#managedAsyncFixIds.has(fixId)) {
-        const hasFix = this.instance.setAsyncStepFrequency(fixId, every);
-        if (!hasFix) {
-          this.#managedAsyncFixIds.delete(fixId);
-          wrappedScript = injectAsyncFix(normalizedScript, every, fixId);
-          injectedFix = true;
-        }
-      } else {
-        wrappedScript = injectAsyncFix(normalizedScript, every, fixId);
-        injectedFix = true;
+    // Unless the script manages its own js/async fix, install (or retune)
+    // ours up front. installAsyncFix works before the simulation box exists,
+    // so runs inside include'd files and jump loops fire the callback too —
+    // no script text injection. Caveat: a `clear` command inside the script
+    // wipes all fixes including this one; runs after it won't yield.
+    if (!definesFix) {
+      try {
+        this.instance.installAsyncFix(fixId, every);
+      } catch (err) {
+        this.#setAsyncStepCallback(null);
+        throw err;
       }
     }
 
     let done: Promise<unknown>;
     try {
-      const result = this.instance.runScript(wrappedScript) as unknown;
+      const result = this.instance.runScript(normalizedScript) as unknown;
       done =
         result && typeof (result as Promise<unknown>).then === "function"
           ? (result as Promise<unknown>)
@@ -375,24 +347,10 @@ export class LammpsClient {
 
     return done
       .then(() => {
-        if (injectedFix && !unfixesFix) {
-          this.#managedAsyncFixIds.add(fixId);
-        }
-        if (unfixesFix) {
-          this.#managedAsyncFixIds.delete(fixId);
-        }
         this.#setAsyncStepCallback(null);
         return this;
       })
       .catch((err) => {
-        if (hasHook && !definesFix) {
-          const stillPresent = this.instance.setAsyncStepFrequency(fixId, every);
-          if (stillPresent) {
-            this.#managedAsyncFixIds.add(fixId);
-          } else {
-            this.#managedAsyncFixIds.delete(fixId);
-          }
-        }
         this.#setAsyncStepCallback(null);
         throw err;
       });

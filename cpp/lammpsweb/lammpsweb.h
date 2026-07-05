@@ -74,6 +74,12 @@ public:
   void runFile(const std::string &path);
   void setAsyncStepCallback(emscripten::val callback, emscripten::val waiter);
   bool setAsyncStepFrequency(const std::string &fixId, std::int32_t every);
+  /**
+   * Define fix js/async immediately (works before the simulation box exists,
+   * via LAMMPS patch 0003), so every run/minimize in every input file fires
+   * the step callback — no script injection needed.
+   */
+  void installAsyncFix(const std::string &fixId, std::int32_t every);
 
   [[nodiscard]] bool isReady() const noexcept;
   [[nodiscard]] bool hasPackage(const std::string &name) const noexcept;

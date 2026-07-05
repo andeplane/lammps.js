@@ -15,7 +15,7 @@ type Harness = {
   client: LammpsClient;
   runScript: Mock;
   setAsyncStepCallback: Mock;
-  setAsyncStepFrequency: Mock;
+  installAsyncFix: Mock;
 };
 
 const emptyView = (): BufferView =>
@@ -37,13 +37,14 @@ const emptyBonds = (): BondSnapshot => ({
 const emptyBox = (): BoxSnapshot => ({
   matrix: emptyView(),
   origin: emptyView(),
-  lengths: emptyView()
+  lengths: emptyView(),
+  dimension: 3
 });
 
-function createHarness(options: { runScriptImpl?: () => void; setFrequencyResult?: boolean } = {}): Harness {
+function createHarness(options: { runScriptImpl?: () => void } = {}): Harness {
   const runScript = options.runScriptImpl ? vi.fn(options.runScriptImpl) : vi.fn();
   const setAsyncStepCallback = vi.fn();
-  const setAsyncStepFrequency = vi.fn(() => options.setFrequencyResult ?? false);
+  const installAsyncFix = vi.fn();
 
   const instance: Partial<LAMMPSWeb> = {
     start: vi.fn(),
@@ -53,7 +54,8 @@ function createHarness(options: { runScriptImpl?: () => void; setFrequencyResult
     runScript,
     runFile: vi.fn(),
     setAsyncStepCallback,
-    setAsyncStepFrequency,
+    setAsyncStepFrequency: vi.fn(() => false),
+    installAsyncFix,
     isReady: vi.fn(() => true),
     getIsRunning: vi.fn(() => false),
     getCurrentStep: vi.fn(() => 0),
@@ -83,7 +85,7 @@ function createHarness(options: { runScriptImpl?: () => void; setFrequencyResult
       writeFile: vi.fn(),
       unlink: vi.fn(),
       readFile: vi.fn(() => "")
-    }
+    } as unknown as LammpsModule["FS"]
   };
 
   return {
@@ -93,13 +95,13 @@ function createHarness(options: { runScriptImpl?: () => void; setFrequencyResult
     ),
     runScript,
     setAsyncStepCallback,
-    setAsyncStepFrequency,
+    installAsyncFix,
   };
 }
 
-describe("LammpsClient script injection", () => {
-  it("injects js/async fix for minimize commands on first use", async () => {
-    const { client, runScript, setAsyncStepCallback, setAsyncStepFrequency } = createHarness();
+describe("LammpsClient js/async fix management", () => {
+  it("installs the fix and runs the script unmodified", async () => {
+    const { client, runScript, setAsyncStepCallback, installAsyncFix } = createHarness();
 
     await client.runScriptAsync(
       "minimize 0.0 1.0e-6 50 200",
@@ -107,56 +109,50 @@ describe("LammpsClient script injection", () => {
       { every: 5, fixId: "jsasync" }
     );
 
+    expect(installAsyncFix).toHaveBeenCalledWith("jsasync", 5);
     expect(runScript).toHaveBeenCalledTimes(1);
-    expect(runScript).toHaveBeenCalledWith(
-      "fix jsasync all js/async 5\nminimize 0.0 1.0e-6 50 200\n"
-    );
-    expect(setAsyncStepFrequency).not.toHaveBeenCalled();
+    expect(runScript).toHaveBeenCalledWith("minimize 0.0 1.0e-6 50 200\n");
     expect(setAsyncStepCallback).toHaveBeenLastCalledWith(undefined, undefined);
   });
 
-  it("reuses managed js/async fix on subsequent runs", async () => {
-    const { client, runScript, setAsyncStepFrequency } = createHarness({ setFrequencyResult: true });
+  it("retunes the fix on subsequent runs", async () => {
+    const { client, runScript, installAsyncFix } = createHarness();
 
-    await client.runScriptAsync(
-      "minimize 0.0 1.0e-6 50 200",
-      null,
-      { every: 5, fixId: "jsasync" }
-    );
-    await client.runScriptAsync(
-      "minimize 0.0 1.0e-6 50 200",
-      null,
-      { every: 3, fixId: "jsasync" }
-    );
+    await client.runScriptAsync("run 10", null, { every: 5, fixId: "jsasync" });
+    await client.runScriptAsync("run 10", null, { every: 3, fixId: "jsasync" });
 
-    expect(runScript).toHaveBeenNthCalledWith(
-      1,
-      "fix jsasync all js/async 5\nminimize 0.0 1.0e-6 50 200\n"
-    );
-    expect(runScript).toHaveBeenNthCalledWith(2, "minimize 0.0 1.0e-6 50 200\n");
-    expect(setAsyncStepFrequency).toHaveBeenCalledWith("jsasync", 3);
+    expect(installAsyncFix).toHaveBeenNthCalledWith(1, "jsasync", 5);
+    expect(installAsyncFix).toHaveBeenNthCalledWith(2, "jsasync", 3);
+    expect(runScript).toHaveBeenNthCalledWith(1, "run 10\n");
+    expect(runScript).toHaveBeenNthCalledWith(2, "run 10\n");
   });
 
-  it("treats unfix before minimize as pre-hook cleanup", async () => {
-    const { client, runScript, setAsyncStepFrequency } = createHarness({ setFrequencyResult: true });
+  it("installs even when the run lives in an include'd file", async () => {
+    const { client, runScript, installAsyncFix } = createHarness();
 
     await client.runScriptAsync(
-      "unfix jsasync\nminimize 0.0 1.0e-6 50 200",
+      "include /setup-and-run.in",
+      null,
+      { every: 2, fixId: "jsasync" }
+    );
+
+    expect(installAsyncFix).toHaveBeenCalledWith("jsasync", 2);
+    expect(runScript).toHaveBeenCalledWith("include /setup-and-run.in\n");
+  });
+
+  it("leaves scripts that manage their own js/async fix alone", async () => {
+    const { client, runScript, installAsyncFix } = createHarness();
+
+    await client.runScriptAsync(
+      "fix jsasync all js/async 7\nrun 10\nunfix jsasync",
       null,
       { every: 5, fixId: "jsasync" }
     );
-    await client.runScriptAsync(
-      "minimize 0.0 1.0e-6 50 200",
-      null,
-      { every: 3, fixId: "jsasync" }
-    );
 
-    expect(runScript).toHaveBeenNthCalledWith(
-      1,
-      "unfix jsasync\nfix jsasync all js/async 5\nminimize 0.0 1.0e-6 50 200\n"
+    expect(installAsyncFix).not.toHaveBeenCalled();
+    expect(runScript).toHaveBeenCalledWith(
+      "fix jsasync all js/async 7\nrun 10\nunfix jsasync\n"
     );
-    expect(runScript).toHaveBeenNthCalledWith(2, "minimize 0.0 1.0e-6 50 200\n");
-    expect(setAsyncStepFrequency).toHaveBeenCalledWith("jsasync", 3);
   });
 
   it("clears callback when runScript throws synchronously", async () => {

@@ -47,3 +47,25 @@ without `nextvalid()` it cannot know when reading is legal.
 upstream may prefer exposing this through the library interface (e.g.
 extending `lammps_extract_fix` with shape/readiness queries) instead of
 public class accessors.
+
+## 0003-modify-allow-js-async-pre-box.patch
+
+**What:** adds `"js/async"` to the exceptions list in `Modify::add_fix`
+(`src/modify.cpp`) — the styles allowed to be defined before the simulation
+box exists.
+
+**Why:** the js/async fix is how lammps.js yields to the browser event loop
+and delivers per-step data. If it can only be defined after `create_box`/
+`read_data`, it has to be text-injected before the first `run` of the
+top-level script — which misses runs inside `include`'d files and `jump`
+loops, freezing the browser tab for those runs. With this exception the fix
+can be installed once right after `lammps_open`, before any user input runs
+(see `LAMMPSWeb::installAsyncFix`). The fix touches no per-atom or box data
+outside its callbacks, so pre-box definition is safe — the same approach
+Atomify used for its `fix atomify`.
+
+**Upstream potential:** low as-is, since `js/async` lives in this repo, not
+upstream LAMMPS. The upstreamable idea is a general mechanism for
+library-registered callbacks that don't depend on the box (e.g. allowing
+`fix external` in the exceptions list, or a dedicated pre-box-safe fix
+flag).

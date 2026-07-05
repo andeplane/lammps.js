@@ -1,0 +1,18 @@
+diff --git a/src/modify.cpp b/src/modify.cpp
+index 36e4355..689540c 100644
+--- a/src/modify.cpp
++++ b/src/modify.cpp
+@@ -831,7 +831,12 @@ Fix *Modify::add_fix(int narg, char **arg, int trysuffix)
+   // clang-format off
+   const char *exceptions[] =
+     {"GPU", "OMP", "INTEL", "property/atom", "cmap", "cmap3", "rx", "deprecated", "STORE/KIM",
+-     "amoeba/pitorsion", "amoeba/bitorsion", "DUMMY", nullptr};
++     "amoeba/pitorsion", "amoeba/bitorsion", "DUMMY",
++     // lammps.js: js/async only forwards step callbacks to JS; it touches no
++     // per-atom data, so it is safe to define before the box exists. This
++     // lets web UIs install it once at startup so every run in every input
++     // file yields to the browser (see LAMMPS-patches.md).
++     "js/async", nullptr};
+   // clang-format on
+ 
+   if (domain->box_exist == 0) {

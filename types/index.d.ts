@@ -100,6 +100,13 @@ export interface LAMMPSWeb {
     waiter?: (promise: Promise<unknown>, donePtr: number, errPtr: number) => void
   ): void;
   setAsyncStepFrequency(fixId: string, every: number): boolean;
+  /**
+   * Define fix js/async immediately — also before the simulation box exists —
+   * so every run/minimize in every input file fires the step callback,
+   * including runs inside include'd files. Retunes the frequency if the fix
+   * already exists.
+   */
+  installAsyncFix(fixId: string, every: number): void;
 
   isReady(): boolean;
   getIsRunning(): boolean;

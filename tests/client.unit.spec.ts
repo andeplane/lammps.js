@@ -77,6 +77,7 @@ interface InstanceMockResult {
     runFile: Mock;
     setAsyncStepCallback: Mock;
     setAsyncStepFrequency: Mock;
+    installAsyncFix: Mock;
     getComputeScalar: Mock;
     getCurrentStep: Mock;
     getTimestepSize: Mock;
@@ -99,6 +100,7 @@ function createInstanceMock(overrides: Partial<LAMMPSWeb> = {}): InstanceMockRes
     runFile: vi.fn(),
     setAsyncStepCallback: vi.fn(),
     setAsyncStepFrequency: vi.fn(() => false),
+    installAsyncFix: vi.fn(),
     getComputeScalar: vi.fn(() => Number.NaN),
     getCurrentStep: vi.fn(() => 0),
     getTimestepSize: vi.fn(() => 0),
@@ -534,7 +536,7 @@ describe("LammpsClient snapshot views", () => {
 });
 
 describe("LammpsClient runScriptAsync", () => {
-  it("leaves scripts without run/minimize untouched", async () => {
+  it("runs scripts unmodified and installs the fix up front", async () => {
     const { moduleMock } = createModuleMock();
     const { instanceMock, mocks } = createInstanceMock();
     const client = createClient(moduleMock, instanceMock);
@@ -542,6 +544,7 @@ describe("LammpsClient runScriptAsync", () => {
     await client.runScriptAsync("units lj", null, { every: 5 });
 
     expect(mocks.runScript).toHaveBeenCalledWith("units lj\n");
+    expect(mocks.installAsyncFix).toHaveBeenCalledWith("jsasync", 5);
     expect(mocks.setAsyncStepCallback).toHaveBeenLastCalledWith(undefined, undefined);
   });
 
@@ -553,10 +556,10 @@ describe("LammpsClient runScriptAsync", () => {
     await client.runScriptAsync("fix jsasync all js/async 7\nrun 5", null, { every: 2 });
 
     expect(mocks.runScript).toHaveBeenCalledWith("fix jsasync all js/async 7\nrun 5\n");
-    expect(mocks.setAsyncStepFrequency).not.toHaveBeenCalled();
+    expect(mocks.installAsyncFix).not.toHaveBeenCalled();
   });
 
-  it("re-injects after a script that unfixes the managed fix", async () => {
+  it("reinstalls the fix after a script that unfixes it", async () => {
     const { moduleMock } = createModuleMock();
     const { instanceMock, mocks } = createInstanceMock();
     const client = createClient(moduleMock, instanceMock);
@@ -564,14 +567,9 @@ describe("LammpsClient runScriptAsync", () => {
     await client.runScriptAsync("run 5\nunfix jsasync", null, { every: 2 });
     await client.runScriptAsync("run 5", null, { every: 2 });
 
-    expect(mocks.runScript).toHaveBeenNthCalledWith(
-      1,
-      "fix jsasync all js/async 2\nrun 5\nunfix jsasync\n"
-    );
-    expect(mocks.runScript).toHaveBeenNthCalledWith(
-      2,
-      "fix jsasync all js/async 2\nrun 5\n"
-    );
+    expect(mocks.installAsyncFix).toHaveBeenCalledTimes(2);
+    expect(mocks.runScript).toHaveBeenNthCalledWith(1, "run 5\nunfix jsasync\n");
+    expect(mocks.runScript).toHaveBeenNthCalledWith(2, "run 5\n");
   });
 
   it("invokes the callback with snapshot data and compute scalars", async () => {
@@ -669,18 +667,15 @@ describe("LammpsClient runScriptAsync", () => {
       client.runScriptAsync("run 10", () => undefined, { every: 1 })
     ).rejects.toThrow("run failed");
 
-    // After a failure the client re-checks whether the injected fix survived.
-    expect(mocks.setAsyncStepFrequency).toHaveBeenCalledWith("jsasync", 1);
     expect(mocks.setAsyncStepCallback).toHaveBeenLastCalledWith(undefined, undefined);
   });
 
-  it("remembers a fix that survived a failed run", async () => {
+  it("keeps runs after a failure working (fix reinstalled per call)", async () => {
     const { moduleMock } = createModuleMock();
     const { instanceMock, mocks } = createInstanceMock();
     mocks.runScript
       .mockReturnValueOnce(Promise.reject(new Error("run failed")))
       .mockReturnValueOnce(undefined);
-    mocks.setAsyncStepFrequency.mockReturnValue(true);
     const client = createClient(moduleMock, instanceMock);
 
     await expect(client.runScriptAsync("run 10", null, { every: 1 })).rejects.toThrow(
@@ -688,8 +683,7 @@ describe("LammpsClient runScriptAsync", () => {
     );
     await client.runScriptAsync("run 10", null, { every: 3 });
 
-    // Second run reuses the surviving fix instead of injecting again.
     expect(mocks.runScript).toHaveBeenNthCalledWith(2, "run 10\n");
-    expect(mocks.setAsyncStepFrequency).toHaveBeenLastCalledWith("jsasync", 3);
+    expect(mocks.installAsyncFix).toHaveBeenLastCalledWith("jsasync", 3);
   });
 });
