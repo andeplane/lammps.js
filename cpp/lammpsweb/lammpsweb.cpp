@@ -3,6 +3,7 @@
 #include "atom.h"
 #include "domain.h"
 #include "fix_js_async.h"
+#include "fix_wall.h"
 #include "force.h"
 #include "info.h"
 #include "input.h"
@@ -383,7 +384,8 @@ EMSCRIPTEN_BINDINGS(lammps_web_module) {
   emscripten::value_object<LAMMPSWeb::BoxSnapshot>("BoxSnapshot")
     .field("matrix", &LAMMPSWeb::BoxSnapshot::matrix)
     .field("origin", &LAMMPSWeb::BoxSnapshot::origin)
-    .field("lengths", &LAMMPSWeb::BoxSnapshot::lengths);
+    .field("lengths", &LAMMPSWeb::BoxSnapshot::lengths)
+    .field("dimension", &LAMMPSWeb::BoxSnapshot::dimension);
 
   emscripten::class_<LAMMPSWeb>("LAMMPSWeb")
     .constructor<>()
@@ -433,7 +435,8 @@ EMSCRIPTEN_BINDINGS(lammps_web_module) {
     .function("syncParticlesWrapped", &LAMMPSWeb::syncParticlesWrapped)
     .function("syncBonds", &LAMMPSWeb::syncBonds)
     .function("syncBondsWrapped", &LAMMPSWeb::syncBondsWrapped)
-    .function("syncSimulationBox", &LAMMPSWeb::syncSimulationBox);
+    .function("syncSimulationBox", &LAMMPSWeb::syncSimulationBox)
+    .function("getWalls", &LAMMPSWeb::getWalls);
 }
 
 LAMMPSWeb::ParticleSnapshot LAMMPSWeb::syncParticles() {
@@ -607,7 +610,50 @@ LAMMPSWeb::BoxSnapshot LAMMPSWeb::syncSimulationBox() {
   snapshot.matrix = makeView(m_cellMatrix, 3, ScalarType::Float32);
   snapshot.origin = makeView(m_origo, 3, ScalarType::Float32);
   snapshot.lengths = makeView(m_boxSize, 3, ScalarType::Float32);
+  snapshot.dimension = static_cast<std::int32_t>(domain->dimension);
   return snapshot;
+}
+
+emscripten::val LAMMPSWeb::getWalls() {
+  auto walls = emscripten::val::array();
+
+  auto *sim = raw();
+  if (!sim || !sim->modify || !sim->domain) {
+    return walls;
+  }
+
+  auto *domain = sim->domain;
+  for (int i = 0; i < sim->modify->nfix; ++i) {
+    auto *wallFix = dynamic_cast<LAMMPS_NS::FixWall *>(sim->modify->fix[i]);
+    if (!wallFix) {
+      continue;
+    }
+
+    for (int m = 0; m < wallFix->nwall; ++m) {
+      const int which = wallFix->wallwhich[m];  // 0-5: XLO, XHI, YLO, YHI, ZLO, ZHI
+      const int style = wallFix->xstyle[m];     // 0-3: NONE, EDGE, CONSTANT, VARIABLE
+
+      double position = 0.0;
+      if (style == 1) {  // EDGE: wall sits on the box face
+        const int dim = which / 2;
+        position = (which % 2 == 0) ? domain->boxlo[dim] : domain->boxhi[dim];
+      } else if (style == 2) {  // CONSTANT
+        position = wallFix->coord0[m];
+      } else {
+        // NONE and VARIABLE walls have no fixed position to render.
+        continue;
+      }
+
+      auto wall = emscripten::val::object();
+      wall.set("which", which);
+      wall.set("style", style);
+      wall.set("position", position);
+      wall.set("cutoff", 0.0);
+      walls.call<void>("push", wall);
+    }
+  }
+
+  return walls;
 }
 
 void LAMMPSWeb::resetStaticBuffers() noexcept {

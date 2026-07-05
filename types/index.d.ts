@@ -33,6 +33,19 @@ export interface BoxSnapshot {
   matrix: BufferView;
   origin: BufferView;
   lengths: BufferView;
+  /** domain->dimension: 2 or 3. */
+  dimension: number;
+}
+
+export interface WallInfo {
+  /** Box face: 0-5 = XLO, XHI, YLO, YHI, ZLO, ZHI. */
+  which: number;
+  /** 1 = EDGE (on the box face), 2 = CONSTANT (fixed coordinate). */
+  style: number;
+  /** Wall position along its axis. */
+  position: number;
+  /** Interaction range (0 when not exposed by the fix). */
+  cutoff: number;
 }
 
 export interface LAMMPSWeb {
@@ -79,6 +92,8 @@ export interface LAMMPSWeb {
   syncBonds(): BondSnapshot;
   syncBondsWrapped(): BondSnapshot;
   syncSimulationBox(): BoxSnapshot;
+  /** Renderable wall fixes (fix wall/*), EDGE and CONSTANT styles only. */
+  getWalls(): WallInfo[];
 }
 
 export interface LammpsModule {

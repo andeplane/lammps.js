@@ -55,6 +55,7 @@ public:
     BufferView matrix;
     BufferView origin;
     BufferView lengths;
+    std::int32_t dimension = 3;
   };
 
   LAMMPSWeb();
@@ -99,6 +100,8 @@ public:
   BondSnapshot syncBonds();
   BondSnapshot syncBondsWrapped();
   BoxSnapshot syncSimulationBox();
+  /** Wall fixes (fix wall/*) as a plain JS array of {which, style, position, cutoff}. */
+  emscripten::val getWalls();
 
 private:
   static void destroyLammps(LAMMPS_NS::LAMMPS *ptr) noexcept;
