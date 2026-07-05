@@ -1,4 +1,5 @@
 import { LammpsClient } from "lammps.js/client";
+import type { LammpsWorkerClient } from "lammps.js/client";
 import { examples } from "./examples";
 
 // Get DOM elements
@@ -31,8 +32,10 @@ function appendLine(text: string) {
   outputEl.scrollTop = outputEl.scrollHeight;
 }
 
-// Simulation state
-let client: LammpsClient | null = null;
+// Simulation state. The simulation runs inside a Web Worker so even the
+// 1M-atom example never blocks the page.
+let client: LammpsWorkerClient | null = null;
+let worker: Worker | null = null;
 let isRunning = false;
 let stopRequested = false;
 
@@ -44,10 +47,10 @@ function setRunning(running: boolean) {
 
 runBtn.addEventListener("click", async () => {
   if (isRunning) {
-    // Request a stop: the step callback rejects on the next invocation,
-    // which aborts the run. Disposing here would tear down the LAMMPS
-    // instance while the run is still suspended on the asyncify stack.
+    // Ask the worker to abort at its next step callback; the pending
+    // runScriptAsync promise resolves with aborted: true.
     stopRequested = true;
+    client?.stopRun();
     runBtn.textContent = "Stopping…";
     runBtn.disabled = true;
     return;
@@ -59,27 +62,41 @@ runBtn.addEventListener("click", async () => {
   setRunning(true);
 
   const script = codeEl.value;
+  const every = examples[Number(selectEl.value)]?.every ?? 100;
 
   try {
-    client = await LammpsClient.create({
-      print: (msg: string) => appendLine(msg),
-      printErr: (msg: string) => appendLine(msg),
+    worker = new Worker(new URL("./lammps.worker.ts", import.meta.url), {
+      type: "module",
     });
+    client = await LammpsClient.create(
+      {
+        // Once the user has asked to stop, suppress further output:
+        // aborting the run makes LAMMPS print an "async step callback
+        // rejected" error that is expected here and would just be noise
+        // before the "Stopped." line.
+        print: (msg: unknown) => {
+          if (!stopRequested) appendLine(String(msg));
+        },
+        printErr: (msg: unknown) => {
+          if (!stopRequested) appendLine(String(msg));
+        },
+      },
+      { worker }
+    );
     if (stopRequested) {
       return;
     }
-    client.start();
 
-    await client.runScriptAsync(
+    const result = await client.runScriptAsync(
       script,
       async () => {
-        if (stopRequested) {
-          throw new Error("Stopped by user");
-        }
         await new Promise(requestAnimationFrame);
       },
-      { every: 100 }
+      { every }
     );
+    if (result.aborted) {
+      stopRequested = true;
+    }
   } catch (err) {
     if (!stopRequested) {
       appendLine(`Error: ${err}`);
@@ -87,6 +104,9 @@ runBtn.addEventListener("click", async () => {
   } finally {
     client?.dispose();
     client = null;
+    // dispose() leaves caller-provided workers alive; terminate ours.
+    worker?.terminate();
+    worker = null;
     if (stopRequested) {
       appendLine("Stopped.");
     }
@@ -97,4 +117,5 @@ runBtn.addEventListener("click", async () => {
 
 window.addEventListener("beforeunload", () => {
   client?.dispose();
+  worker?.terminate();
 });

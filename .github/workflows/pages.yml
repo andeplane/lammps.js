@@ -21,10 +21,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache emsdk
+        uses: actions/cache@v5
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ runner.os }}-${{ hashFiles('emsdk_manifest.txt') }}
+
+      - name: Install emsdk
+        run: |
+          if [ ! -d "$HOME/emsdk" ]; then
+            git clone https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          fi
+          cd "$HOME/emsdk"
+          ./emsdk install "$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/emsdk_manifest.txt")"
+          ./emsdk activate "$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/emsdk_manifest.txt")"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Build lammps.js (the demo links the local package)
+        run: |
+          source "$HOME/emsdk/emsdk_env.sh"
+          export EMSDK_PATH="$HOME/emsdk"
+          npm ci
+          npm run build
 
       - name: Build demo
         run: |

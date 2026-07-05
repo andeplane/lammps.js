@@ -8,7 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "lammps.js": "^1.2.0"
+    "lammps.js": "file:../.."
   },
   "devDependencies": {
     "typescript": "^5.4.0",
