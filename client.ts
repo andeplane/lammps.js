@@ -3,6 +3,7 @@ import createModule from "./cpp/lammps.js";
 import type {
   LammpsModule,
   LAMMPSWeb,
+  ModuleOptions,
   ParticleSnapshot,
   BondSnapshot,
   BoxSnapshot
@@ -199,10 +200,10 @@ export class LammpsClient {
   }
 
   static async create(
-    moduleOptions: Record<string, unknown> = {},
+    moduleOptions: ModuleOptions = {},
     clientOptions: LammpsClientOptions = {}
   ): Promise<LammpsClient> {
-    const module = (await createModule(moduleOptions)) as LammpsModule;
+    const module = await createModule(moduleOptions);
     const instance = new module.LAMMPSWeb();
     return new LammpsClient(module, instance, clientOptions);
   }
@@ -426,7 +427,7 @@ export class LammpsClient {
 }
 
 export async function createLammps(
-  moduleOptions: Record<string, unknown> = {},
+  moduleOptions: ModuleOptions = {},
   clientOptions: LammpsClientOptions = {}
 ): Promise<LammpsClient> {
   return LammpsClient.create(moduleOptions, clientOptions);

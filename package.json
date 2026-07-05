@@ -24,7 +24,8 @@
   ],
   "scripts": {
     "build:wasm": "python3 cpp/build.py",
-    "build:dist": "tsc -p tsconfig.build.json",
+    "build:dist": "tsc -p tsconfig.build.json && npm run copy:types",
+    "copy:types": "mkdir -p dist/types dist/cpp && cp types/index.d.ts types/client.d.ts dist/types/ && cp cpp/lammps.d.ts dist/cpp/",
     "build": "npm run build:wasm && npm run build:dist",
     "test": "npm run build && vitest run",
     "test:watch": "vitest watch"
