@@ -5,6 +5,8 @@
 
 LAMMPS in the browser. WebAssembly build + a small TS-friendly client.
 
+**[Try in your browser →](https://editor.lammps.org/)**
+
 ## Install
 
 ```bash
