@@ -127,6 +127,16 @@ export interface LAMMPSWeb {
   syncParticlesWrapped(): ParticleSnapshot;
   syncBonds(): BondSnapshot;
   syncBondsWrapped(): BondSnapshot;
+  /**
+   * Register a max bond distance for an atom-type pair: bond snapshots then
+   * also include a bond for every neighborlist pair of these types closer
+   * than the distance. Requires setBuildNeighborlist(true) and only works
+   * inside the js/async step callback (the list is built per synced step).
+   */
+  setBondDistance(type1: number, type2: number, distance: number): void;
+  clearBondDistances(): void;
+  /** Build an occasional half neighbor list each synced step (fix js/async). */
+  setBuildNeighborlist(build: boolean): void;
   syncSimulationBox(): BoxSnapshot;
   /** Renderable wall fixes (fix wall/...), EDGE and CONSTANT styles only. */
   getWalls(): WallInfo[];

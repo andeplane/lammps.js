@@ -6,8 +6,10 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <emscripten.h>
@@ -100,6 +102,16 @@ public:
   ParticleSnapshot syncParticlesWrapped();
   BondSnapshot syncBonds();
   BondSnapshot syncBondsWrapped();
+
+  /**
+   * Register a max bond distance for an atom-type pair: sync'ed bond
+   * snapshots then also contain a bond for every neighborlist pair of these
+   * types closer than the distance. Requires setBuildNeighborlist(true).
+   */
+  void setBondDistance(std::int32_t type1, std::int32_t type2, double distance);
+  void clearBondDistances();
+  /** Build an occasional half neighbor list each synced step (fix js/async). */
+  void setBuildNeighborlist(bool build);
   BoxSnapshot syncSimulationBox();
   /** Wall fixes (fix wall/...) as a plain JS array of {which, style, position, cutoff}. */
   emscripten::val getWalls();
@@ -130,6 +142,8 @@ private:
   void resetStaticBuffers() noexcept;
   /** Throw a JS Error if LAMMPS stored an error during the last command(s). */
   void throwIfLammpsError();
+  void appendNeighborlistBonds(bool wrapped);
+  [[nodiscard]] double bondDistanceFor(int type1, int type2) const noexcept;
   ParticleSnapshot captureParticles(bool wrapped);
   BondSnapshot captureBonds(bool wrapped);
 
@@ -186,6 +200,8 @@ private:
   std::vector<float> m_particlePositions;
   std::vector<float> m_bondsPosition1;
   std::vector<float> m_bondsPosition2;
+  std::map<std::pair<std::int32_t, std::int32_t>, double> m_bondDistances;
+  bool m_buildNeighborlist = false;
 };
 
 namespace LAMMPSWebAsync {

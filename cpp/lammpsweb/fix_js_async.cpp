@@ -16,6 +16,8 @@
 #include "comm.h"
 #include "error.h"
 #include "lammpsweb.h"
+#include "neigh_list.h"
+#include "neighbor.h"
 #include "update.h"
 #include "utils.h"
 
@@ -41,6 +43,23 @@ int FixJsAsync::setmask() {
   return mask;
 }
 
+void FixJsAsync::init() {
+  // Occasional: only built when explicitly asked for via build_one().
+  neighbor->add_request(this, NeighConst::REQ_OCCASIONAL);
+}
+
+void FixJsAsync::init_list(int /*id*/, NeighList *ptr) {
+  list = ptr;
+}
+
+void FixJsAsync::maybeBuildNeighborlist() {
+  if (!build_neighborlist || !list) {
+    return;
+  }
+  neighbor->build_one(list);
+  neighborlist_built_at_timestep = static_cast<long long>(update->ntimestep);
+}
+
 void FixJsAsync::end_of_step() {
   if (nevery <= 0) {
     nevery = 1;
@@ -52,6 +71,7 @@ void FixJsAsync::end_of_step() {
     return;
   }
 
+  maybeBuildNeighborlist();
   const bool ok = LAMMPSWebAsync::invokeStepCallbackAndWait(
     static_cast<std::int32_t>(update->ntimestep)
   );
@@ -72,6 +92,7 @@ void FixJsAsync::min_post_force(int) {
     return;
   }
 
+  maybeBuildNeighborlist();
   const bool ok = LAMMPSWebAsync::invokeStepCallbackAndWait(
     static_cast<std::int32_t>(update->ntimestep)
   );

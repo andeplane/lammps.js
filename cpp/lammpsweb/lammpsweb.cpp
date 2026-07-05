@@ -10,6 +10,7 @@
 #include "library.h"
 #include "lmptype.h"
 #include "modify.h"
+#include "neigh_list.h"
 #include "update.h"
 
 #include <cstddef>
@@ -436,6 +437,9 @@ EMSCRIPTEN_BINDINGS(lammps_web_module) {
     .function("syncParticlesWrapped", &LAMMPSWeb::syncParticlesWrapped)
     .function("syncBonds", &LAMMPSWeb::syncBonds)
     .function("syncBondsWrapped", &LAMMPSWeb::syncBondsWrapped)
+    .function("setBondDistance", &LAMMPSWeb::setBondDistance)
+    .function("clearBondDistances", &LAMMPSWeb::clearBondDistances)
+    .function("setBuildNeighborlist", &LAMMPSWeb::setBuildNeighborlist)
     .function("syncSimulationBox", &LAMMPSWeb::syncSimulationBox)
     .function("getWalls", &LAMMPSWeb::getWalls)
     .function("syncModifiers", &LAMMPSWeb::syncModifiers)
@@ -518,15 +522,19 @@ LAMMPSWeb::BondSnapshot LAMMPSWeb::captureBonds(bool wrapped) {
   auto *atom = sim->atom;
   auto *domain = sim->domain;
 
-  if (atom->nbonds == 0 || !atom->num_bond || !atom->bond_atom) {
-    m_bondsPosition1.clear();
-    m_bondsPosition2.clear();
+  m_bondsPosition1.clear();
+  m_bondsPosition2.clear();
+
+  const bool haveTopologyBonds = atom->nbonds != 0 && atom->num_bond && atom->bond_atom;
+  if (!haveTopologyBonds) {
+    appendNeighborlistBonds(wrapped);
+    snapshot.count = static_cast<std::uint32_t>(m_bondsPosition1.size() / 3);
+    snapshot.first = makeView(m_bondsPosition1, 3, ScalarType::Float32);
+    snapshot.second = makeView(m_bondsPosition2, 3, ScalarType::Float32);
     return snapshot;
   }
 
   const auto totalBonds = static_cast<std::size_t>(atom->nbonds);
-  m_bondsPosition1.clear();
-  m_bondsPosition2.clear();
   m_bondsPosition1.reserve(totalBonds * 3);
   m_bondsPosition2.reserve(totalBonds * 3);
 
@@ -579,6 +587,7 @@ LAMMPSWeb::BondSnapshot LAMMPSWeb::captureBonds(bool wrapped) {
     }
   }
 
+  appendNeighborlistBonds(wrapped);
   snapshot.count = static_cast<std::uint32_t>(m_bondsPosition1.size() / 3);
   snapshot.first = makeView(m_bondsPosition1, 3, ScalarType::Float32);
   snapshot.second = makeView(m_bondsPosition2, 3, ScalarType::Float32);
@@ -677,6 +686,110 @@ emscripten::val LAMMPSWeb::syncModifier(const std::string &category, const std::
   }
   result.set("series", series);
   return result;
+}
+
+void LAMMPSWeb::setBondDistance(std::int32_t type1, std::int32_t type2, double distance) {
+  if (distance <= 0) {
+    return;
+  }
+  m_bondDistances[{type1, type2}] = distance;
+  m_bondDistances[{type2, type1}] = distance;
+}
+
+void LAMMPSWeb::clearBondDistances() {
+  m_bondDistances.clear();
+}
+
+void LAMMPSWeb::setBuildNeighborlist(bool build) {
+  m_buildNeighborlist = build;
+  auto *sim = raw();
+  if (!sim || !sim->modify) {
+    return;
+  }
+  for (int i = 0; i < sim->modify->nfix; ++i) {
+    if (auto *fix = dynamic_cast<LAMMPS_NS::FixJsAsync *>(sim->modify->fix[i])) {
+      fix->build_neighborlist = build;
+    }
+  }
+}
+
+double LAMMPSWeb::bondDistanceFor(int type1, int type2) const noexcept {
+  const auto it = m_bondDistances.find({type1, type2});
+  return it == m_bondDistances.end() ? 0.0 : it->second;
+}
+
+void LAMMPSWeb::appendNeighborlistBonds(bool wrapped) {
+  auto *sim = raw();
+  if (!m_buildNeighborlist || m_bondDistances.empty() || !sim || !sim->modify) {
+    return;
+  }
+
+  // Find a js/async fix whose occasional list was built on this timestep;
+  // also (re)apply the build flag so fixes defined later pick it up.
+  LAMMPS_NS::FixJsAsync *asyncFix = nullptr;
+  for (int i = 0; i < sim->modify->nfix; ++i) {
+    if (auto *fix = dynamic_cast<LAMMPS_NS::FixJsAsync *>(sim->modify->fix[i])) {
+      fix->build_neighborlist = true;
+      if (fix->list &&
+          fix->neighborlist_built_at_timestep ==
+            static_cast<long long>(sim->update->ntimestep)) {
+        asyncFix = fix;
+        break;
+      }
+    }
+  }
+  if (!asyncFix) {
+    return;
+  }
+
+  auto *atom = sim->atom;
+  auto *domain = sim->domain;
+  auto *list = asyncFix->list;
+  auto *image = wrapped ? nullptr : static_cast<int *>(lammps_extract_atom(static_cast<void *>(sim), "image"));
+  int *numneigh = list->numneigh;
+  int **firstneigh = list->firstneigh;
+
+  const auto numAtoms = static_cast<int>(atom->natoms);
+  for (int i = 0; i < numAtoms && i < list->inum; ++i) {
+    double first[3] = { atom->x[i][0], atom->x[i][1], atom->x[i][2] };
+    if (image) {
+      domain->unmap(first, image[i]);
+    } else {
+      domain->remap(first);
+    }
+
+    const int typeI = atom->type[i];
+    int *jlist = firstneigh[i];
+    const int jnum = numneigh[i];
+
+    for (int jj = 0; jj < jnum; ++jj) {
+      int j = jlist[jj];
+      j &= NEIGHMASK;
+      if (j >= numAtoms) {
+        continue;  // ghost atom
+      }
+
+      const double maxDistance = bondDistanceFor(typeI, atom->type[j]);
+      if (maxDistance <= 0) {
+        continue;
+      }
+
+      double dx = atom->x[j][0] - atom->x[i][0];
+      double dy = atom->x[j][1] - atom->x[i][1];
+      double dz = atom->x[j][2] - atom->x[i][2];
+      applyMinimumImage(domain, dx, dy, dz);
+      if (dx * dx + dy * dy + dz * dz >= maxDistance * maxDistance) {
+        continue;
+      }
+
+      m_bondsPosition1.push_back(static_cast<float>(first[0]));
+      m_bondsPosition1.push_back(static_cast<float>(first[1]));
+      m_bondsPosition1.push_back(static_cast<float>(first[2]));
+      m_bondsPosition2.push_back(static_cast<float>(first[0] + dx));
+      m_bondsPosition2.push_back(static_cast<float>(first[1] + dy));
+      m_bondsPosition2.push_back(static_cast<float>(first[2] + dz));
+    }
+  }
 }
 
 LAMMPSWeb::BufferView LAMMPSWeb::getModifierPerAtom(const std::string &category,

@@ -28,11 +28,21 @@ class FixJsAsync : public Fix {
  public:
   FixJsAsync(class LAMMPS *, int, char **);
   int setmask() override;
+  void init() override;
+  void init_list(int, class NeighList *) override;
   void end_of_step() override;
   void min_post_force(int) override;
   void setFrequency(int every);
 
+  // Occasional half neighbor list, built per step only when
+  // build_neighborlist is set (used for distance-based bond rendering).
+  class NeighList *list = nullptr;
+  bool build_neighborlist = false;
+  long long neighborlist_built_at_timestep = -1;
+
  private:
+  void maybeBuildNeighborlist();
+
   int nevery = 1;
   int step_count = 0;
 };
