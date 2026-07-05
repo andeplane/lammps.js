@@ -1,13 +1,18 @@
 import type { LammpsModule } from "../../types";
 
+// The Emscripten loader sniffs `process` to decide whether it runs under
+// Node; hiding it forces the browser code path under jsdom.
+type GlobalWithProcess = { process?: unknown };
+const globalScope = globalThis as unknown as GlobalWithProcess;
+
 let modulePromise: Promise<LammpsModule> | null = null;
 
 export async function loadModule(): Promise<LammpsModule> {
   if (!modulePromise) {
     modulePromise = (async () => {
-      const originalProcess = (globalThis as any).process;
+      const originalProcess = globalScope.process;
       const hadProcess = typeof originalProcess !== "undefined";
-      (globalThis as any).process = undefined;
+      globalScope.process = undefined;
 
       try {
         const { default: createModule } = await import("../../dist/cpp/lammps.js");
@@ -16,8 +21,8 @@ export async function loadModule(): Promise<LammpsModule> {
           printErr: () => undefined,
         });
       } finally {
-        if (hadProcess) (globalThis as any).process = originalProcess;
-        else delete (globalThis as any).process;
+        if (hadProcess) globalScope.process = originalProcess;
+        else delete globalScope.process;
       }
     })();
   }

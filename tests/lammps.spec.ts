@@ -22,6 +22,14 @@ const ASYNC_DYNAMIC_RUN_STEPS = 6;
 let wasm: LammpsModule;
 let lmp: LAMMPSWeb;
 let client: LammpsClient;
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
+}
 const resolveView = (module: LammpsModule, view: BufferView) => {
   if (!view.ptr || !view.length) {
     return null;
@@ -165,12 +173,14 @@ describe("lammps.js wasm interface", () => {
       return Promise.resolve();
     }, waiter);
 
-    const maybe = (lmp.runScript as any)(`
+    // Under ASYNCIFY the embind binding may return a promise even though
+    // the declared return type is void.
+    const maybe: unknown = lmp.runScript(`
       fix jsasync all js/async ${ASYNC_CALLBACK_EVERY}
       run ${ASYNC_RUN_STEPS}
       unfix jsasync
     `);
-    if (maybe && typeof maybe.then === "function") {
+    if (isPromiseLike(maybe)) {
       await maybe;
     }
 
@@ -178,7 +188,7 @@ describe("lammps.js wasm interface", () => {
 
     expect(calls).toBe(2);
 
-    lmp.setAsyncStepCallback(undefined as any, undefined as any);
+    lmp.setAsyncStepCallback(undefined, undefined);
   });
 });
 
@@ -359,7 +369,7 @@ describe("LammpsClient helper", () => {
     await Promise.race([done, timeout]);
 
     expect(captured).not.toBeNull();
-    expect(captured as number).toBeGreaterThan(0);
+    expect(captured ?? Number.NaN).toBeGreaterThan(0);
 
   });
 

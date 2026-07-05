@@ -1,101 +1,96 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
 
+import type {
+  BondSnapshot,
+  BoxSnapshot,
+  BufferView,
+  LAMMPSWeb,
+  LammpsModule,
+  ParticleSnapshot
+} from "../types";
 import { LammpsClient } from "../dist/client.js";
 
 type Harness = {
   client: LammpsClient;
-  runScript: ReturnType<typeof vi.fn>;
-  setAsyncStepCallback: ReturnType<typeof vi.fn>;
-  setAsyncStepFrequency: ReturnType<typeof vi.fn>;
+  runScript: Mock;
+  setAsyncStepCallback: Mock;
+  setAsyncStepFrequency: Mock;
 };
+
+const emptyView = (): BufferView =>
+  ({ ptr: 0, length: 0, components: 0, type: 0 } as unknown as BufferView);
+
+const emptyParticles = (): ParticleSnapshot => ({
+  positions: emptyView(),
+  ids: emptyView(),
+  types: emptyView(),
+  count: 0
+});
+
+const emptyBonds = (): BondSnapshot => ({
+  first: emptyView(),
+  second: emptyView(),
+  count: 0
+});
+
+const emptyBox = (): BoxSnapshot => ({
+  matrix: emptyView(),
+  origin: emptyView(),
+  lengths: emptyView()
+});
 
 function createHarness(options: { runScriptImpl?: () => void; setFrequencyResult?: boolean } = {}): Harness {
   const runScript = options.runScriptImpl ? vi.fn(options.runScriptImpl) : vi.fn();
   const setAsyncStepCallback = vi.fn();
   const setAsyncStepFrequency = vi.fn(() => options.setFrequencyResult ?? false);
 
-  const instance = {
-    start() {},
-    stop() {},
-    advance() {},
-    runCommand() {},
+  const instance: Partial<LAMMPSWeb> = {
+    start: vi.fn(),
+    stop: vi.fn(),
+    advance: vi.fn(),
+    runCommand: vi.fn(),
     runScript,
-    runFile() {},
+    runFile: vi.fn(),
     setAsyncStepCallback,
     setAsyncStepFrequency,
-    isReady() {
-      return true;
-    },
-    getIsRunning() {
-      return false;
-    },
-    getCurrentStep() {
-      return 0;
-    },
-    getTimestepSize() {
-      return 0.0;
-    },
-    getComputeScalar() {
-      return Number.NaN;
-    },
-    syncParticles() {
-      return {
-        positions: { ptr: 0, length: 0, components: 3, type: 0 },
-        ids: { ptr: 0, length: 0, components: 1, type: 2 },
-        types: { ptr: 0, length: 0, components: 1, type: 2 },
-        count: 0,
-      };
-    },
-    syncParticlesWrapped() {
-      return {
-        positions: { ptr: 0, length: 0, components: 3, type: 0 },
-        ids: { ptr: 0, length: 0, components: 1, type: 2 },
-        types: { ptr: 0, length: 0, components: 1, type: 2 },
-        count: 0,
-      };
-    },
-    syncBonds() {
-      return {
-        first: { ptr: 0, length: 0, components: 3, type: 0 },
-        second: { ptr: 0, length: 0, components: 3, type: 0 },
-        count: 0,
-      };
-    },
-    syncBondsWrapped() {
-      return {
-        first: { ptr: 0, length: 0, components: 3, type: 0 },
-        second: { ptr: 0, length: 0, components: 3, type: 0 },
-        count: 0,
-      };
-    },
-    syncSimulationBox() {
-      return {
-        matrix: { ptr: 0, length: 0, components: 3, type: 0 },
-        origin: { ptr: 0, length: 0, components: 1, type: 0 },
-        lengths: { ptr: 0, length: 0, components: 1, type: 0 },
-      };
-    },
-  } as any;
+    isReady: vi.fn(() => true),
+    getIsRunning: vi.fn(() => false),
+    getCurrentStep: vi.fn(() => 0),
+    getTimestepSize: vi.fn(() => 0),
+    getComputeScalar: vi.fn(() => Number.NaN),
+    syncParticles: vi.fn(emptyParticles),
+    syncParticlesWrapped: vi.fn(emptyParticles),
+    syncBonds: vi.fn(emptyBonds),
+    syncBondsWrapped: vi.fn(emptyBonds),
+    syncSimulationBox: vi.fn(emptyBox)
+  };
 
-  const module = {
-    HEAPF32: new Float32Array(0),
-    HEAPF64: new Float64Array(0),
-    HEAP32: new Int32Array(0),
-    HEAP64: new BigInt64Array(0),
-    ScalarType: { Float32: 0, Float64: 1, Int32: 2, Int64: 3 },
+  const module: Partial<LammpsModule> = {
+    HEAPF32: new Float32Array(16),
+    HEAPF64: new Float64Array(16),
+    HEAP32: new Int32Array(16),
+    HEAP64: new BigInt64Array(16),
+    ScalarType: {
+      Float32: 0,
+      Float64: 1,
+      Int32: 2,
+      Int64: 3
+    } as unknown as LammpsModule["ScalarType"],
     FS: {
-      mkdir() {},
-      chdir() {},
-      writeFile() {},
-      unlink() {},
-      readFile() {
-        return "";
-      },
-    },
-  } as any;
+      mkdir: vi.fn(),
+      chdir: vi.fn(),
+      writeFile: vi.fn(),
+      unlink: vi.fn(),
+      readFile: vi.fn(() => "")
+    }
+  };
 
   return {
-    client: new LammpsClient(module, instance),
+    client: new LammpsClient(
+      module as unknown as LammpsModule,
+      instance as unknown as LAMMPSWeb
+    ),
     runScript,
     setAsyncStepCallback,
     setAsyncStepFrequency,
