@@ -1,5 +1,7 @@
 import createModule from "./cpp/lammps.js";
+import { LammpsWorkerClient } from "./worker-client.js";
 
+import type { LammpsWorkerClientOptions, WorkerLike } from "./worker-client.js";
 import type {
   LammpsModule,
   LAMMPSWeb,
@@ -74,6 +76,17 @@ export interface SyncBoxOptions {
 
 export interface LammpsClientOptions {
   workdir?: string;
+  /**
+   * Run LAMMPS inside a Web Worker instead of on the calling thread.
+   * `true` spawns the bundled worker entry (`lammps.js/worker`); pass a
+   * Worker instance to control how the worker is created (e.g. with a
+   * bundler-specific URL). When set, create() resolves to a
+   * LammpsWorkerClient whose snapshot getters return the latest step
+   * data received from the worker.
+   */
+  worker?: boolean | WorkerLike;
+  /** Worker mode only: receives failures from fire-and-forget commands. */
+  onError?: (error: Error) => void;
 }
 
 export interface ParticleArrays {
@@ -200,9 +213,20 @@ export class LammpsClient {
   }
 
   static async create(
+    moduleOptions?: ModuleOptions,
+    clientOptions?: LammpsClientOptions & { worker?: false | undefined }
+  ): Promise<LammpsClient>;
+  static async create(
+    moduleOptions: ModuleOptions,
+    clientOptions: LammpsClientOptions & { worker: true | WorkerLike }
+  ): Promise<LammpsWorkerClient>;
+  static async create(
     moduleOptions: ModuleOptions = {},
     clientOptions: LammpsClientOptions = {}
-  ): Promise<LammpsClient> {
+  ): Promise<LammpsClient | LammpsWorkerClient> {
+    if (clientOptions.worker) {
+      return createWorkerBackedClient(moduleOptions, clientOptions, clientOptions.worker);
+    }
     const module = await createModule(moduleOptions);
     const instance = new module.LAMMPSWeb();
     return new LammpsClient(module, instance, clientOptions);
@@ -426,11 +450,75 @@ export class LammpsClient {
   }
 }
 
+function toOutputWriter(value: unknown): ((text: string) => void) | undefined {
+  return typeof value === "function" ? (value as (text: string) => void) : undefined;
+}
+
+function createDefaultWorker(): WorkerLike {
+  if (typeof Worker === "undefined") {
+    throw new Error(
+      "Web Workers are not available in this environment; pass { worker: <Worker instance> } instead"
+    );
+  }
+  return new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+}
+
+async function createWorkerBackedClient(
+  moduleOptions: ModuleOptions,
+  clientOptions: LammpsClientOptions,
+  worker: true | WorkerLike
+): Promise<LammpsWorkerClient> {
+  const ownsWorker = worker === true;
+  const target = worker === true ? createDefaultWorker() : worker;
+  const print = toOutputWriter(moduleOptions.print);
+  const printErr = toOutputWriter(moduleOptions.printErr);
+
+  const options: LammpsWorkerClientOptions = {
+    workdir: clientOptions.workdir,
+    onError: clientOptions.onError
+  };
+  if (print || printErr) {
+    options.onOutput = (stream, text) => {
+      if (stream === "stdout") {
+        print?.(text);
+      } else {
+        printErr?.(text);
+      }
+    };
+  }
+
+  return LammpsWorkerClient.create(target, options, ownsWorker);
+}
+
+export async function createLammps(
+  moduleOptions?: ModuleOptions,
+  clientOptions?: LammpsClientOptions & { worker?: false | undefined }
+): Promise<LammpsClient>;
+export async function createLammps(
+  moduleOptions: ModuleOptions,
+  clientOptions: LammpsClientOptions & { worker: true | WorkerLike }
+): Promise<LammpsWorkerClient>;
 export async function createLammps(
   moduleOptions: ModuleOptions = {},
   clientOptions: LammpsClientOptions = {}
-): Promise<LammpsClient> {
-  return LammpsClient.create(moduleOptions, clientOptions);
+): Promise<LammpsClient | LammpsWorkerClient> {
+  if (clientOptions.worker) {
+    return createWorkerBackedClient(moduleOptions, clientOptions, clientOptions.worker);
+  }
+  return LammpsClient.create(moduleOptions, {
+    workdir: clientOptions.workdir,
+    onError: clientOptions.onError
+  });
 }
 
 export { createModule };
+export { LammpsWorkerClient } from "./worker-client.js";
+export type { WorkerLike, LammpsWorkerClientOptions } from "./worker-client.js";
+export type {
+  WorkerStepData,
+  WorkerRunOptions,
+  WorkerRunResult,
+  WorkerParticleData,
+  WorkerBondData,
+  WorkerBoxData
+} from "./worker-protocol.js";

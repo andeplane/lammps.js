@@ -86,6 +86,64 @@ await lammps.runScriptAsync(
 );
 ```
 
+## Usage (in a Web Worker)
+
+Pass `worker: true` to run the whole simulation — wasm module included — inside a
+Web Worker instead of on the calling thread. Long runs then never block the UI:
+
+```ts
+import { LammpsClient } from "lammps.js/client";
+
+const lammps = await LammpsClient.create(
+  { print: (msg) => console.log(msg) },
+  { worker: true }
+);
+
+const result = await lammps.runScriptAsync(
+  "run 100000",
+  async (data) => {
+    // Called on the main thread every `every` steps with copied snapshots.
+    console.log("step", data.step, "atoms", data.particles?.count);
+  },
+  { every: 100 }
+);
+
+lammps.stopRun();  // ask a running script to abort at its next step
+lammps.dispose();  // shuts down and terminates the worker
+```
+
+What `worker: true` means:
+
+- `create()` resolves to a `LammpsWorkerClient` instead of a `LammpsClient`.
+  Commands are forwarded to the worker; snapshot getters
+  (`syncParticles()`, `getCurrentStep()`, …) return the **latest step data
+  received from the worker** rather than reading live wasm memory.
+- Per-step data is **copied and transferred** (zero-copy handoff of the
+  copies) to the main thread. The simulation pauses until your step
+  callback's promise resolves, exactly like the synchronous mode.
+- If your bundler needs control over worker creation, pass a `Worker`
+  instance instead of `true`:
+
+```ts
+const worker = new Worker(new URL("lammps.js/worker", import.meta.url), { type: "module" });
+const lammps = await LammpsClient.create({}, { worker });
+```
+
+### Do I need SharedArrayBuffer?
+
+**No — not for this.** Worker mode communicates via `postMessage` with
+transferred `ArrayBuffer`s, which works everywhere Web Workers do, with no
+special headers.
+
+`SharedArrayBuffer` only becomes relevant for future **multithreaded**
+builds (Emscripten pthreads / KOKKOS). If that lands, pages will need to be
+[cross-origin isolated](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements):
+served with `Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp`. Hosts that can't set response
+headers — like GitHub Pages — can enable it with the
+[coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker) shim,
+which injects those headers from a service worker.
+
 ## Usage (manual stepping, optional)
 
 ```ts
