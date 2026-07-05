@@ -154,10 +154,11 @@ bool ModifierState::syncComputePerAtom(LAMMPS_NS::Compute *compute) {
   }
   isPerAtom = true;
 
+  // Exact size, like the atom-style variable path: the buffer length is the
+  // contract for getModifierPerAtom, so it must shrink when atoms are
+  // deleted or stale trailing values would be reported.
   const auto numAtoms = static_cast<std::size_t>(lmp->atom->natoms);
-  if (numAtoms > perAtomData.size()) {
-    perAtomData.resize(numAtoms);
-  }
+  perAtomData.resize(numAtoms);
 
   if (compute->size_peratom_cols == 0) {
     for (std::size_t i = 0; i < numAtoms; ++i) {

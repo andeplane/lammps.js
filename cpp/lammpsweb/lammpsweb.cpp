@@ -440,7 +440,8 @@ EMSCRIPTEN_BINDINGS(lammps_web_module) {
     .function("getWalls", &LAMMPSWeb::getWalls)
     .function("syncModifiers", &LAMMPSWeb::syncModifiers)
     .function("listModifiers", &LAMMPSWeb::listModifiers)
-    .function("syncModifier", &LAMMPSWeb::syncModifier);
+    .function("syncModifier", &LAMMPSWeb::syncModifier)
+    .function("getModifierPerAtom", &LAMMPSWeb::getModifierPerAtom);
 }
 
 LAMMPSWeb::ParticleSnapshot LAMMPSWeb::syncParticles() {
@@ -676,6 +677,15 @@ emscripten::val LAMMPSWeb::syncModifier(const std::string &category, const std::
   }
   result.set("series", series);
   return result;
+}
+
+LAMMPSWeb::BufferView LAMMPSWeb::getModifierPerAtom(const std::string &category,
+                                                    const std::string &name) {
+  auto *state = m_modifiers.find(category, name);
+  if (!state || !state->isPerAtom || state->perAtomData.empty()) {
+    return BufferView{};
+  }
+  return makeView(state->perAtomData, 1, ScalarType::Float64);
 }
 
 emscripten::val LAMMPSWeb::getWalls() {

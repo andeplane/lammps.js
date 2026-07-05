@@ -140,6 +140,12 @@ export interface LAMMPSWeb {
    * updated snapshot with series views, or null if the modifier is unknown.
    */
   syncModifier(category: ModifierCategory, name: string): ModifierSnapshot | null;
+  /**
+   * Float64 view over a per-atom modifier's values (one per atom, ordered
+   * like syncParticles). Empty view unless the modifier is per-atom and has
+   * been synced via syncModifier.
+   */
+  getModifierPerAtom(category: ModifierCategory, name: string): BufferView;
 }
 
 export interface LammpsModule {

@@ -114,6 +114,12 @@ public:
    * the modifier is unknown. category is "compute" | "fix" | "variable".
    */
   emscripten::val syncModifier(const std::string &category, const std::string &name);
+  /**
+   * Float64 view over a per-atom modifier's values (one per atom, ordered
+   * like syncParticles). Empty view unless the modifier is per-atom and has
+   * been synced via syncModifier.
+   */
+  BufferView getModifierPerAtom(const std::string &category, const std::string &name);
 
 private:
   static void destroyLammps(LAMMPS_NS::LAMMPS *ptr) noexcept;
