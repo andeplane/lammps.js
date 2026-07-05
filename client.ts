@@ -166,18 +166,18 @@ export interface AsyncStepData {
 
 type HeapView = Float32Array | Float64Array | Int32Array | BigInt64Array;
 
-function buildHeapMap(module: LammpsModule): Map<number, HeapView> {
+// The Emscripten module is built with memory growth enabled. When the WASM
+// heap grows, the underlying ArrayBuffer is detached and the module's HEAP*
+// views are replaced with fresh ones. We must therefore resolve the heap view
+// from the module on every access rather than caching it, otherwise a large
+// run that grows memory leaves us holding a detached buffer ("Cannot perform
+// Construct on a detached ArrayBuffer").
+function resolveHeap(module: LammpsModule, type: number): HeapView {
   const Scalar = module.ScalarType ?? {};
-  const map = new Map<number, HeapView>();
-  if (module.HEAPF32) map.set(Scalar.Float32 ?? 0, module.HEAPF32);
-  if (module.HEAPF64) map.set(Scalar.Float64 ?? 1, module.HEAPF64);
-  if (module.HEAP32) map.set(Scalar.Int32 ?? 2, module.HEAP32);
-  if (module.HEAP64) {
-    map.set(Scalar.Int64 ?? 3, module.HEAP64);
-  } else if (module.HEAP32) {
-    map.set(Scalar.Int64 ?? 3, module.HEAP32);
-  }
-  return map;
+  if (type === (Scalar.Float64 ?? 1) && module.HEAPF64) return module.HEAPF64;
+  if (type === (Scalar.Int32 ?? 2) && module.HEAP32) return module.HEAP32;
+  if (type === (Scalar.Int64 ?? 3)) return module.HEAP64 ?? module.HEAP32;
+  return module.HEAPF32;
 }
 
 function buildShiftMap(module: LammpsModule): Map<number, number> {
@@ -192,17 +192,15 @@ function buildShiftMap(module: LammpsModule): Map<number, number> {
 
 function viewToTyped(
   module: LammpsModule,
-  heaps: Map<number, HeapView>,
   shifts: Map<number, number>,
   view: ParticleSnapshot["positions"] | undefined,
   copy: boolean
 ): HeapView {
   if (!view || !view.ptr || !view.length) {
-    const heap = heaps.get(0) ?? module.HEAPF32;
-    const empty = heap.subarray(0, 0);
+    const empty = module.HEAPF32.subarray(0, 0);
     return copy ? empty.slice() : empty;
   }
-  const heap = heaps.get(view.type) ?? module.HEAPF32;
+  const heap = resolveHeap(module, view.type);
   const shift = shifts.get(view.type) ?? 2;
   // Divide instead of >>: bitwise ops truncate to 32 bits, which corrupts
   // pointers above 2GB (possible with memory growth, and in KOKKOS builds).
@@ -213,24 +211,24 @@ function viewToTyped(
 
 function toParticleResult(client: LammpsClient, wrapped: boolean, copy: boolean): ParticleArrays {
   const snap = wrapped ? client.instance.syncParticlesWrapped() : client.instance.syncParticles();
-  const positions = viewToTyped(client.module, client._heaps, client._shifts, snap.positions, copy) as Float32Array;
-  const ids = viewToTyped(client.module, client._heaps, client._shifts, snap.ids, copy) as Int32Array | BigInt64Array;
-  const types = viewToTyped(client.module, client._heaps, client._shifts, snap.types, copy) as Int32Array;
+  const positions = viewToTyped(client.module, client._shifts, snap.positions, copy) as Float32Array;
+  const ids = viewToTyped(client.module, client._shifts, snap.ids, copy) as Int32Array | BigInt64Array;
+  const types = viewToTyped(client.module, client._shifts, snap.types, copy) as Int32Array;
   return { count: snap.count, positions, ids, types, snapshot: snap };
 }
 
 function toBondResult(client: LammpsClient, wrapped: boolean, copy: boolean): BondArrays {
   const snap = wrapped ? client.instance.syncBondsWrapped() : client.instance.syncBonds();
-  const first = viewToTyped(client.module, client._heaps, client._shifts, snap.first, copy) as Float32Array;
-  const second = viewToTyped(client.module, client._heaps, client._shifts, snap.second, copy) as Float32Array;
+  const first = viewToTyped(client.module, client._shifts, snap.first, copy) as Float32Array;
+  const second = viewToTyped(client.module, client._shifts, snap.second, copy) as Float32Array;
   return { count: snap.count, first, second, snapshot: snap };
 }
 
 function toBoxResult(client: LammpsClient, copy: boolean): BoxArrays {
   const snap = client.instance.syncSimulationBox();
-  const matrix = viewToTyped(client.module, client._heaps, client._shifts, snap.matrix, copy) as Float32Array;
-  const origin = viewToTyped(client.module, client._heaps, client._shifts, snap.origin, copy) as Float32Array;
-  const lengths = viewToTyped(client.module, client._heaps, client._shifts, snap.lengths, copy) as Float32Array;
+  const matrix = viewToTyped(client.module, client._shifts, snap.matrix, copy) as Float32Array;
+  const origin = viewToTyped(client.module, client._shifts, snap.origin, copy) as Float32Array;
+  const lengths = viewToTyped(client.module, client._shifts, snap.lengths, copy) as Float32Array;
   return { matrix, origin, lengths, snapshot: snap };
 }
 
@@ -239,7 +237,6 @@ export class LammpsClient {
   readonly instance: LAMMPSWeb;
   readonly workdir: string;
 
-  readonly _heaps: Map<number, HeapView>;
   readonly _shifts: Map<number, number>;
   readonly #managedAsyncFixIds: Set<string>;
   readonly #kokkos: KokkosOptions | null;
@@ -248,7 +245,6 @@ export class LammpsClient {
     this.module = module;
     this.instance = instance;
     this.workdir = options.workdir ?? DEFAULT_WORKDIR;
-    this._heaps = buildHeapMap(module);
     this._shifts = buildShiftMap(module);
     this.#managedAsyncFixIds = new Set<string>();
     this.#kokkos = resolveKokkosOptions(options.kokkos);

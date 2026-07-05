@@ -364,6 +364,41 @@ describe("LammpsClient snapshot views", () => {
     expect(particles.snapshot.count).toBe(2);
   });
 
+  it("reads live heap views after WASM memory growth detaches the old buffer", () => {
+    const { moduleMock } = createModuleMock();
+    const positions = view(64, 3, 3, 0);
+
+    const { instanceMock, mocks } = createInstanceMock();
+    mocks.syncParticles.mockReturnValue({
+      positions,
+      ids: emptyView(),
+      types: emptyView(),
+      count: 1
+    });
+    const client = createClient(moduleMock, instanceMock);
+
+    // Simulate Emscripten memory growth: a new, larger buffer replaces the old
+    // one, the module's HEAP* views are reassigned, and the old buffer is
+    // detached (transferred). A client that cached the old views would now
+    // throw "Cannot perform Construct on a detached ArrayBuffer".
+    const oldBuffer = moduleMock.HEAPF32!.buffer;
+    const grownBuffer = new ArrayBuffer(4096);
+    moduleMock.HEAPF32 = new Float32Array(grownBuffer);
+    moduleMock.HEAPF64 = new Float64Array(grownBuffer);
+    moduleMock.HEAP32 = new Int32Array(grownBuffer);
+    moduleMock.HEAP64 = new BigInt64Array(grownBuffer);
+    structuredClone(oldBuffer, { transfer: [oldBuffer] });
+    expect(oldBuffer.byteLength).toBe(0); // confirm detachment
+
+    moduleMock.HEAPF32.set([7, 8, 9], 64 >> 2);
+
+    expect(() => client.syncParticles()).not.toThrow();
+    const particles = client.syncParticles();
+
+    expect(Array.from(particles.positions)).toEqual([7, 8, 9]);
+    expect(particles.positions.buffer).toBe(grownBuffer);
+  });
+
   it("returns detached arrays when copy is requested", () => {
     const { moduleMock } = createModuleMock();
     const positions = view(64, 3, 3, 0);
