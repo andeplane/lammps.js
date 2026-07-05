@@ -103,10 +103,23 @@ export interface LammpsModule {
   HEAP64: BigInt64Array;
   FS: {
     mkdir(path: string): void;
+    rmdir(path: string): void;
     chdir(path: string): void;
+    cwd(): string;
     writeFile(path: string, data: string | Uint8Array): void;
     unlink(path: string): void;
     readFile(path: string, opts?: { encoding: "utf8" }): string;
+    readdir(path: string): string[];
+    analyzePath(path: string): {
+      exists: boolean;
+      isRoot: boolean;
+      path: string;
+      name: string;
+      error: number;
+    };
+    stat(path: string): { size: number; mode: number; mtime: Date };
+    isDir(mode: number): boolean;
+    isFile(mode: number): boolean;
   };
   LAMMPSWeb: new () => LAMMPSWeb;
   ScalarType: typeof ScalarType;
