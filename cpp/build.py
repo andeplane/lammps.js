@@ -35,6 +35,7 @@ KOKKOS = os.environ.get("KOKKOS", "0") == "1"
 BASE_DIR = Path(__file__).resolve().parent
 LAMMPS_DIR = BASE_DIR / "lammps"
 SRC_DIR = LAMMPS_DIR / "src"
+PATCHES_DIR = BASE_DIR / "patches"
 BUILD_DIR = BASE_DIR / ("build_emscripten_kokkos" if KOKKOS else "build_emscripten")
 
 # KOKKOS needs 64-bit pointers (MEMORY64=2 keeps a wasm32 binary) and pthreads.
@@ -86,6 +87,36 @@ def ensure_clone() -> None:
         "https://github.com/lammps/lammps.git",
         str(LAMMPS_DIR),
     ], cwd=BASE_DIR)
+
+
+def apply_lammps_patches() -> None:
+    """Apply the LAMMPS source patches from cpp/patches (see LAMMPS-patches.md).
+
+    Idempotent: a patch that no longer applies is checked in reverse to see
+    whether it is already in place; anything else is a hard error so a stale
+    clone can't silently build without a required patch.
+    """
+    if not PATCHES_DIR.is_dir():
+        return
+    for patch in sorted(PATCHES_DIR.glob("*.patch")):
+        check = subprocess.run(
+            ["git", "apply", "--check", str(patch)],
+            cwd=LAMMPS_DIR, capture_output=True,
+        )
+        if check.returncode == 0:
+            subprocess.check_call(["git", "apply", str(patch)], cwd=LAMMPS_DIR)
+            print(f"Applied LAMMPS patch: {patch.name}")
+            continue
+        reverse = subprocess.run(
+            ["git", "apply", "--reverse", "--check", str(patch)],
+            cwd=LAMMPS_DIR, capture_output=True,
+        )
+        if reverse.returncode == 0:
+            continue  # already applied
+        sys.exit(
+            f"ERROR: LAMMPS patch {patch.name} does not apply to the clone in "
+            f"{LAMMPS_DIR}. Delete the clone (or fix the patch) and rebuild."
+        )
 
 
 def copy_custom_sources() -> None:
@@ -325,6 +356,9 @@ def main():
     # Clone LAMMPS if needed
     ensure_clone()
     
+    # Apply LAMMPS source patches (documented in LAMMPS-patches.md)
+    apply_lammps_patches()
+
     # Copy custom sources
     print("Copying custom source files...")
     copy_custom_sources()

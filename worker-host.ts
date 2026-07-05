@@ -97,9 +97,10 @@ export function installLammpsWorker(scope: WorkerScope, options: InstallLammpsWo
       );
     } catch (err) {
       // A step-callback throw (our RunAbortedError) is how we ask fix
-      // js/async to stop. The client swallows that error — it aborts the
-      // run and resolves rather than rejecting — so reaching here means a
-      // genuine run failure, which must propagate.
+      // js/async to stop; the run then fails with "JS async step callback
+      // rejected" and runScriptAsync rejects. That rejection is expected
+      // when we requested the abort — anything else is a genuine run
+      // failure, which must propagate.
       if (!abortRequested) {
         throw err;
       }

@@ -54,6 +54,12 @@ export interface LAMMPSWeb {
 
   isReady(): boolean;
   getIsRunning(): boolean;
+  /** Message of the most recent LAMMPS error this session ("" if none). */
+  getLastErrorMessage(): string;
+  /** Input line the most recent LAMMPS error stopped on ("" if none). */
+  getLastErrorInputLine(): string;
+  /** Input line currently (or most recently) being processed. */
+  getLastInputLine(): string;
   getCurrentStep(): number;
   getTimestepSize(): number;
   getComputeScalar(id: string): number;

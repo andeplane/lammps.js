@@ -4,6 +4,7 @@
 #include "domain.h"
 #include "fix_js_async.h"
 #include "force.h"
+#include "input.h"
 #include "library.h"
 #include "lmptype.h"
 #include "modify.h"
@@ -17,6 +18,12 @@
 #include <vector>
 
 #include <emscripten.h>
+
+// Throws a real JS Error (propagates through the wasm frames to the embind
+// caller; under ASYNCIFY a suspended call's promise rejects with it).
+EM_JS(void, lammpsweb_throw_error, (const char *message), {
+  throw new Error(UTF8ToString(message));
+});
 
 namespace {
 
@@ -148,6 +155,8 @@ void LAMMPSWeb::startWithArgs(const std::vector<std::string> &extraArgs) {
   }
 
   m_lmp.reset(instance);
+  m_lastErrorMessage.clear();
+  m_lastErrorInputLine.clear();
 }
 
 void LAMMPSWeb::stop() {
@@ -167,6 +176,30 @@ void LAMMPSWeb::advance(std::int32_t steps, bool applyPre, bool applyPost) {
 
   const std::string command = buildRunCommand(steps, applyPre, applyPost);
   lammps_commands_string(static_cast<void *>(sim), command.c_str());
+  throwIfLammpsError();
+}
+
+std::string LAMMPSWeb::getLastInputLine() const {
+  const auto *sim = raw();
+  if (!sim || !sim->input) {
+    return "";
+  }
+  const char *line = sim->input->get_last_line();
+  return line ? std::string(line) : "";
+}
+
+void LAMMPSWeb::throwIfLammpsError() {
+  auto *sim = raw();
+  if (!sim || lammps_has_error(static_cast<void *>(sim)) == 0) {
+    return;
+  }
+  // Reading the message clears the library's error slot; keep copies so
+  // getLastErrorMessage/getLastErrorInputLine still answer afterwards.
+  char buffer[4096];
+  lammps_get_last_error_message(static_cast<void *>(sim), buffer, sizeof(buffer));
+  m_lastErrorMessage = buffer;
+  m_lastErrorInputLine = getLastInputLine();
+  lammpsweb_throw_error(m_lastErrorMessage.c_str());
 }
 
 void LAMMPSWeb::runCommand(const std::string &command) {
@@ -188,6 +221,7 @@ void LAMMPSWeb::runScript(const std::string &script) {
   }
 
   lammps_commands_string(static_cast<void *>(sim), script.c_str());
+  throwIfLammpsError();
 }
 
 void LAMMPSWeb::runFile(const std::string &path) {
@@ -197,6 +231,7 @@ void LAMMPSWeb::runFile(const std::string &path) {
   }
 
   lammps_file(static_cast<void *>(sim), path.c_str());
+  throwIfLammpsError();
 }
 
 void LAMMPSWeb::setAsyncStepCallback(emscripten::val callback, emscripten::val waiter) {
@@ -329,6 +364,9 @@ EMSCRIPTEN_BINDINGS(lammps_web_module) {
     .function("setAsyncStepFrequency", &LAMMPSWeb::setAsyncStepFrequency)
     .function("isReady", &LAMMPSWeb::isReady)
     .function("getIsRunning", &LAMMPSWeb::getIsRunning)
+    .function("getLastErrorMessage", &LAMMPSWeb::getLastErrorMessage)
+    .function("getLastErrorInputLine", &LAMMPSWeb::getLastErrorInputLine)
+    .function("getLastInputLine", &LAMMPSWeb::getLastInputLine)
     .function("getCurrentStep", &LAMMPSWeb::getCurrentStep)
     .function("getTimestepSize", &LAMMPSWeb::getTimestepSize)
     .function("getComputeScalar", &LAMMPSWeb::getComputeScalar)

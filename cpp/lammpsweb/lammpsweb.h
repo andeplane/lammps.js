@@ -74,6 +74,12 @@ public:
   [[nodiscard]] bool isReady() const noexcept;
   [[nodiscard]] bool hasPackage(const std::string &name) const noexcept;
   [[nodiscard]] bool getIsRunning() const noexcept;
+  /** Message of the most recent LAMMPS error in this session ("" if none). */
+  [[nodiscard]] std::string getLastErrorMessage() const { return m_lastErrorMessage; }
+  /** Input line the most recent LAMMPS error stopped on ("" if none). */
+  [[nodiscard]] std::string getLastErrorInputLine() const { return m_lastErrorInputLine; }
+  /** Input line currently (or most recently) being processed. */
+  [[nodiscard]] std::string getLastInputLine() const;
   [[nodiscard]] double getCurrentStep() const noexcept;
   [[nodiscard]] double getTimestepSize() const noexcept;
   [[nodiscard]] double getComputeScalar(const std::string &id) const noexcept;
@@ -91,6 +97,8 @@ private:
   [[nodiscard]] bool hasSimulation() const noexcept { return static_cast<bool>(m_lmp); }
   [[nodiscard]] LAMMPS_NS::LAMMPS *raw() const noexcept { return m_lmp.get(); }
   void resetStaticBuffers() noexcept;
+  /** Throw a JS Error if LAMMPS stored an error during the last command(s). */
+  void throwIfLammpsError();
   ParticleSnapshot captureParticles(bool wrapped);
   BondSnapshot captureBonds(bool wrapped);
 
@@ -138,6 +146,8 @@ private:
   }
 
   LammpsPtr m_lmp{nullptr, &LAMMPSWeb::destroyLammps};
+  std::string m_lastErrorMessage;
+  std::string m_lastErrorInputLine;
   std::array<float, 9> m_cellMatrix{};
   std::array<float, 3> m_boxSize{};
   std::array<float, 3> m_origo{};
