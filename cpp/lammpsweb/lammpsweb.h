@@ -1,5 +1,6 @@
 #pragma once
 
+#include "introspect.h"
 #include "lammps.h"
 
 #include <array>
@@ -100,8 +101,19 @@ public:
   BondSnapshot syncBonds();
   BondSnapshot syncBondsWrapped();
   BoxSnapshot syncSimulationBox();
-  /** Wall fixes (fix wall/*) as a plain JS array of {which, style, position, cutoff}. */
+  /** Wall fixes (fix wall/...) as a plain JS array of {which, style, position, cutoff}. */
   emscripten::val getWalls();
+
+  /** Refresh the modifier registry from the currently defined computes/fixes/variables. */
+  void syncModifiers();
+  /** Tracked modifiers as a plain JS array of info objects. */
+  emscripten::val listModifiers();
+  /**
+   * Sync one modifier's data (invoking the compute when allowed) and return a
+   * plain JS object with its scalar, labels, and series BufferViews; null if
+   * the modifier is unknown. category is "compute" | "fix" | "variable".
+   */
+  emscripten::val syncModifier(const std::string &category, const std::string &name);
 
 private:
   static void destroyLammps(LAMMPS_NS::LAMMPS *ptr) noexcept;
@@ -159,6 +171,7 @@ private:
   }
 
   LammpsPtr m_lmp{nullptr, &LAMMPSWeb::destroyLammps};
+  lammpsweb::ModifierRegistry m_modifiers;
   std::string m_lastErrorMessage;
   std::string m_lastErrorInputLine;
   std::array<float, 9> m_cellMatrix{};

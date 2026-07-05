@@ -42,7 +42,7 @@ BUILD_DIR = BASE_DIR / ("build_emscripten_kokkos" if KOKKOS else "build_emscript
 KOKKOS_CC_FLAGS = "-pthread -sMEMORY64=2"
 
 # Custom source files to copy into LAMMPS
-CUSTOM_BASENAMES = ["lammpsweb", "fix_js_async"]
+CUSTOM_BASENAMES = ["lammpsweb", "fix_js_async", "introspect"]
 
 
 def get_emsdk_path():

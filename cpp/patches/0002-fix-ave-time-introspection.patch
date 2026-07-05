@@ -1,0 +1,38 @@
+diff --git a/src/fix_ave_time.h b/src/fix_ave_time.h
+index 7e16b0e..6fde976 100644
+--- a/src/fix_ave_time.h
++++ b/src/fix_ave_time.h
+@@ -36,7 +36,9 @@ class FixAveTime : public Fix {
+   double compute_vector(int) override;
+   double compute_array(int, int) override;
+ 
+- private:
++  // lammps.js: value_t and the accessors below are public so web wrappers
++  // can introspect what this fix averages and read its results for live
++  // plotting (see LAMMPS-patches.md).
+   struct value_t {
+     int which;       // type of data: COMPUTE, FIX, VARIABLE
+     int argindex;    // 1-based index if data is vector, else 0
+@@ -51,6 +53,14 @@ class FixAveTime : public Fix {
+       int v;
+     } val;
+   };
++
++  bigint nextvalid();
++  int getmode() const { return mode; }
++  int getnvalues() const { return nvalues; }
++  int getnrows() const { return nrows; }
++  const std::vector<value_t> &getValues() const { return values; }
++
++ private:
+   std::vector<value_t> values;
+ 
+   int nvalues, nrepeat, nfreq, irepeat;
+@@ -84,7 +94,6 @@ class FixAveTime : public Fix {
+   void invoke_vector(bigint);
+   void options(int, int, char **);
+   void allocate_arrays();
+-  bigint nextvalid();
+ };
+ }    // namespace LAMMPS_NS
+ #endif

@@ -37,6 +37,42 @@ export interface BoxSnapshot {
   dimension: number;
 }
 
+export type ModifierCategory = "compute" | "fix" | "variable";
+
+export interface ModifierInfo {
+  name: string;
+  category: ModifierCategory;
+  /** LAMMPS style string, e.g. "rdf", "msd", "ave/time"; "equal" | "atom" for variables. */
+  style: string;
+  isPerAtom: boolean;
+  hasScalar: boolean;
+  /** Series x-axis is not time (histogram-like); consumers should replace, not append. */
+  clearPerSync: boolean;
+  xLabel: string;
+  yLabel: string;
+}
+
+export interface ModifierSeries {
+  /** Stable key, e.g. "Pxx", "g(r) pair 1". */
+  name: string;
+  /** Display label. */
+  label: string;
+  /**
+   * Float32 views over the full accumulated series. Only valid until the
+   * next syncModifier/syncModifiers call (the backing buffers can move or be
+   * freed when the modifier is removed) — copy what you need immediately and
+   * never cache a view across syncs.
+   */
+  x: BufferView;
+  y: BufferView;
+}
+
+export interface ModifierSnapshot extends ModifierInfo {
+  /** Last scalar value (meaningful when hasScalar). */
+  scalar: number;
+  series: ModifierSeries[];
+}
+
 export interface WallInfo {
   /** Box face: 0-5 = XLO, XHI, YLO, YHI, ZLO, ZHI. */
   which: number;
@@ -92,8 +128,18 @@ export interface LAMMPSWeb {
   syncBonds(): BondSnapshot;
   syncBondsWrapped(): BondSnapshot;
   syncSimulationBox(): BoxSnapshot;
-  /** Renderable wall fixes (fix wall/*), EDGE and CONSTANT styles only. */
+  /** Renderable wall fixes (fix wall/...), EDGE and CONSTANT styles only. */
   getWalls(): WallInfo[];
+
+  /** Refresh the modifier registry from the currently defined computes/fixes/variables. */
+  syncModifiers(): void;
+  /** Tracked computes, fixes, and (equal/atom-style) variables. */
+  listModifiers(): ModifierInfo[];
+  /**
+   * Invoke (computes, when allowed) and sync one modifier's data. Returns the
+   * updated snapshot with series views, or null if the modifier is unknown.
+   */
+  syncModifier(category: ModifierCategory, name: string): ModifierSnapshot | null;
 }
 
 export interface LammpsModule {

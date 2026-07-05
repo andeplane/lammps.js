@@ -166,6 +166,7 @@ void LAMMPSWeb::stop() {
     return;
   }
 
+  m_modifiers.clear();
   m_lmp.reset();
   resetStaticBuffers();
 }
@@ -436,7 +437,10 @@ EMSCRIPTEN_BINDINGS(lammps_web_module) {
     .function("syncBonds", &LAMMPSWeb::syncBonds)
     .function("syncBondsWrapped", &LAMMPSWeb::syncBondsWrapped)
     .function("syncSimulationBox", &LAMMPSWeb::syncSimulationBox)
-    .function("getWalls", &LAMMPSWeb::getWalls);
+    .function("getWalls", &LAMMPSWeb::getWalls)
+    .function("syncModifiers", &LAMMPSWeb::syncModifiers)
+    .function("listModifiers", &LAMMPSWeb::listModifiers)
+    .function("syncModifier", &LAMMPSWeb::syncModifier);
 }
 
 LAMMPSWeb::ParticleSnapshot LAMMPSWeb::syncParticles() {
@@ -612,6 +616,66 @@ LAMMPSWeb::BoxSnapshot LAMMPSWeb::syncSimulationBox() {
   snapshot.lengths = makeView(m_boxSize, 3, ScalarType::Float32);
   snapshot.dimension = static_cast<std::int32_t>(domain->dimension);
   return snapshot;
+}
+
+void LAMMPSWeb::syncModifiers() {
+  auto *sim = raw();
+  if (!sim) {
+    m_modifiers.clear();
+    return;
+  }
+  m_modifiers.refresh(sim);
+}
+
+emscripten::val LAMMPSWeb::listModifiers() {
+  auto result = emscripten::val::array();
+  for (auto *state : m_modifiers.list()) {
+    auto info = emscripten::val::object();
+    info.set("name", state->name);
+    info.set("category", state->category);
+    info.set("style", state->style);
+    info.set("isPerAtom", state->isPerAtom);
+    info.set("hasScalar", state->hasScalar);
+    info.set("clearPerSync", state->clearPerSync);
+    info.set("xLabel", state->xLabel);
+    info.set("yLabel", state->yLabel);
+    result.call<void>("push", info);
+  }
+  return result;
+}
+
+emscripten::val LAMMPSWeb::syncModifier(const std::string &category, const std::string &name) {
+  auto *sim = raw();
+  auto *state = m_modifiers.find(category, name);
+  if (!sim || !state) {
+    return emscripten::val::null();
+  }
+  if (!state->sync()) {
+    return emscripten::val::null();
+  }
+
+  auto result = emscripten::val::object();
+  result.set("name", state->name);
+  result.set("category", state->category);
+  result.set("style", state->style);
+  result.set("isPerAtom", state->isPerAtom);
+  result.set("hasScalar", state->hasScalar);
+  result.set("scalar", state->scalarValue);
+  result.set("clearPerSync", state->clearPerSync);
+  result.set("xLabel", state->xLabel);
+  result.set("yLabel", state->yLabel);
+
+  auto series = emscripten::val::array();
+  for (auto &entry : state->series) {
+    auto item = emscripten::val::object();
+    item.set("name", entry.name);
+    item.set("label", entry.label);
+    item.set("x", emscripten::val(makeView(entry.x, 1, ScalarType::Float32)));
+    item.set("y", emscripten::val(makeView(entry.y, 1, ScalarType::Float32)));
+    series.call<void>("push", item);
+  }
+  result.set("series", series);
+  return result;
 }
 
 emscripten::val LAMMPSWeb::getWalls() {
