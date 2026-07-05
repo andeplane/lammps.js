@@ -34,23 +34,28 @@ function appendLine(text: string) {
 // Simulation state
 let client: LammpsClient | null = null;
 let isRunning = false;
+let stopRequested = false;
 
 function setRunning(running: boolean) {
   isRunning = running;
   runBtn.textContent = running ? "Stop" : "Run";
+  runBtn.disabled = false;
 }
 
 runBtn.addEventListener("click", async () => {
   if (isRunning) {
-    // Stop
-    client?.dispose();
-    client = null;
-    setRunning(false);
+    // Request a stop: the step callback rejects on the next invocation,
+    // which aborts the run. Disposing here would tear down the LAMMPS
+    // instance while the run is still suspended on the asyncify stack.
+    stopRequested = true;
+    runBtn.textContent = "Stopping…";
+    runBtn.disabled = true;
     return;
   }
 
   // Start
   outputEl.textContent = "";
+  stopRequested = false;
   setRunning(true);
 
   const index = Number(selectEl.value);
@@ -61,22 +66,32 @@ runBtn.addEventListener("click", async () => {
       print: (msg: string) => appendLine(msg),
       printErr: (msg: string) => appendLine(msg),
     });
+    if (stopRequested) {
+      return;
+    }
     client.start();
 
     await client.runScriptAsync(
       script,
       async () => {
+        if (stopRequested) {
+          throw new Error("Stopped by user");
+        }
         await new Promise(requestAnimationFrame);
       },
       { every: 100 }
     );
   } catch (err) {
-    if (isRunning) {
+    if (!stopRequested) {
       appendLine(`Error: ${err}`);
     }
   } finally {
     client?.dispose();
     client = null;
+    if (stopRequested) {
+      appendLine("Stopped.");
+    }
+    stopRequested = false;
     setRunning(false);
   }
 });
