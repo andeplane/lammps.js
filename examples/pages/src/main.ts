@@ -4,6 +4,8 @@ import { examples } from "./examples";
 
 // Get DOM elements
 const selectEl = document.getElementById("example-select") as HTMLSelectElement;
+const threadsLabelEl = document.getElementById("threads-label") as HTMLLabelElement;
+const threadsSelectEl = document.getElementById("threads-select") as HTMLSelectElement;
 const runBtn = document.getElementById("run-btn") as HTMLButtonElement;
 const codeEl = document.getElementById("lammps-code") as HTMLTextAreaElement;
 const outputEl = document.getElementById("console-output") as HTMLPreElement;
@@ -16,9 +18,26 @@ examples.forEach((ex, i) => {
   selectEl.appendChild(opt);
 });
 
+// Thread choices for KOKKOS examples: powers of two up to the module's
+// pthread pool size (8), defaulting to the hardware concurrency. The
+// selection is passed to LAMMPS as `-k on t N` when the client starts —
+// it is not part of the script.
+const MAX_KOKKOS_THREADS = 8;
+const defaultThreads = Math.min(navigator.hardwareConcurrency || 4, MAX_KOKKOS_THREADS);
+for (let threads = 1; threads <= MAX_KOKKOS_THREADS; threads *= 2) {
+  const opt = document.createElement("option");
+  opt.value = String(threads);
+  opt.textContent = String(threads);
+  if (threads === defaultThreads || (threads < defaultThreads && threads * 2 > defaultThreads)) {
+    opt.selected = true;
+  }
+  threadsSelectEl.appendChild(opt);
+}
+
 // Show code for selected example (editable — running uses the textarea contents)
 function showExample(index: number) {
   codeEl.value = examples[index].script;
+  threadsLabelEl.classList.toggle("visible", Boolean(examples[index].kokkos));
 }
 showExample(0);
 
@@ -62,7 +81,21 @@ runBtn.addEventListener("click", async () => {
   setRunning(true);
 
   const script = codeEl.value;
-  const every = examples[Number(selectEl.value)]?.every ?? 100;
+  const example = examples[Number(selectEl.value)];
+  const every = example?.every ?? 100;
+
+  let kokkos: { threads: number } | undefined;
+  if (example?.kokkos) {
+    if (crossOriginIsolated) {
+      kokkos = { threads: Number(threadsSelectEl.value) || 1 };
+      appendLine(`Running on the KOKKOS build with ${kokkos.threads} thread(s).\n`);
+    } else {
+      appendLine(
+        "SharedArrayBuffer is unavailable (page is not cross-origin isolated); " +
+          "falling back to the single-threaded build.\n"
+      );
+    }
+  }
 
   try {
     worker = new Worker(new URL("./lammps.worker.ts", import.meta.url), {
@@ -81,7 +114,7 @@ runBtn.addEventListener("click", async () => {
           if (!stopRequested) appendLine(String(msg));
         },
       },
-      { worker }
+      { worker, kokkos }
     );
     if (stopRequested) {
       return;

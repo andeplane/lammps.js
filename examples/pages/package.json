@@ -3,11 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "copy:coi": "mkdir -p public && cp node_modules/coi-serviceworker/coi-serviceworker.min.js public/",
+    "dev": "npm run copy:coi && vite",
+    "build": "npm run copy:coi && tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "coi-serviceworker": "^0.1.7",
     "lammps.js": "file:../.."
   },
   "devDependencies": {

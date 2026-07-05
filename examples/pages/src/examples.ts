@@ -3,6 +3,11 @@ export interface Example {
   script: string;
   /** How often (in timesteps) the async step callback yields to the UI. */
   every?: number;
+  /**
+   * Run on the multithreaded KOKKOS build. The thread count comes from
+   * the UI dropdown (passed to LAMMPS as `-k on t N`), not the script.
+   */
+  kokkos?: boolean;
 }
 
 export const examples: Example[] = [
@@ -68,6 +73,30 @@ neigh_modify    every 20 delay 0 check no
 fix             1 all nve
 thermo          10
 run             100`,
+  },
+  {
+    name: "LJ Melt (KOKKOS, multithreaded)",
+    kokkos: true,
+    every: 200,
+    script: `# Runs on the KOKKOS (pthreads) build — pick a thread count in the
+# dropdown above and compare the performance summary at the end.
+# Styles get the /kk suffix automatically (-sf kk).
+units           lj
+timestep        0.005
+atom_style      atomic
+lattice         fcc 0.8442
+region          box block 0 12 0 12 0 12
+create_box      1 box
+create_atoms    1 box
+mass            1 1.0
+velocity        all create 1.44 87287 loop geom
+pair_style      lj/cut 2.5
+pair_coeff      1 1 1.0 1.0 2.5
+neighbor        0.3 bin
+neigh_modify    every 20 delay 0 check no
+fix             1 all nve
+thermo          500
+run             10000`,
   },
   {
     name: "Energy Minimization",

@@ -47,6 +47,7 @@ jobs:
           export EMSDK_PATH="$HOME/emsdk"
           npm ci
           npm run build
+          npm run build:wasm:kokkos
 
       - name: Build demo
         run: |
