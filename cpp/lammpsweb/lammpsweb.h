@@ -83,6 +83,16 @@ public:
   [[nodiscard]] double getCurrentStep() const noexcept;
   [[nodiscard]] double getTimestepSize() const noexcept;
   [[nodiscard]] double getComputeScalar(const std::string &id) const noexcept;
+  /** update->whichflag: 0 = idle, 1 = dynamics run, 2 = minimization. */
+  [[nodiscard]] std::int32_t getRunMode() const noexcept;
+  /** Steps completed in the active run (ntimestep - firststep). */
+  [[nodiscard]] double getRunStepsDone() const noexcept;
+  /** Total steps of the active run (laststep - firststep). */
+  [[nodiscard]] double getRunStepsTotal() const noexcept;
+  /** Any thermo keyword as a number (spcpu, cpuremain, temp, press, ...). */
+  [[nodiscard]] double getThermo(const std::string &keyword) const noexcept;
+  /** Current memory usage in bytes (LAMMPS resident set estimate). */
+  [[nodiscard]] double getMemoryUsage() const noexcept;
 
   ParticleSnapshot syncParticles();
   ParticleSnapshot syncParticlesWrapped();

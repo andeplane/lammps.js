@@ -4,6 +4,7 @@
 #include "domain.h"
 #include "fix_js_async.h"
 #include "force.h"
+#include "info.h"
 #include "input.h"
 #include "library.h"
 #include "lmptype.h"
@@ -288,6 +289,59 @@ double LAMMPSWeb::getTimestepSize() const noexcept {
   return sim->update->dt;
 }
 
+std::int32_t LAMMPSWeb::getRunMode() const noexcept {
+  const auto *sim = raw();
+  if (!sim || !sim->update) {
+    return 0;
+  }
+  return static_cast<std::int32_t>(sim->update->whichflag);
+}
+
+double LAMMPSWeb::getRunStepsDone() const noexcept {
+  const auto *sim = raw();
+  if (!sim || !sim->update || sim->update->whichflag == 0) {
+    return 0;
+  }
+  return static_cast<double>(sim->update->ntimestep - sim->update->firststep);
+}
+
+double LAMMPSWeb::getRunStepsTotal() const noexcept {
+  const auto *sim = raw();
+  if (!sim || !sim->update || sim->update->whichflag == 0) {
+    return 0;
+  }
+  return static_cast<double>(sim->update->laststep - sim->update->firststep);
+}
+
+double LAMMPSWeb::getThermo(const std::string &keyword) const noexcept {
+  auto *sim = raw();
+  if (!sim || keyword.empty()) {
+    return 0.0;
+  }
+  const double value = lammps_get_thermo(static_cast<void *>(sim), keyword.c_str());
+  // Keywords like spcpu/cpuremain raise "cannot be used between runs" when
+  // idle; LAMMPS captures that into its last-error slot. Drain it here so a
+  // status poll can't make the next successful run command throw a stale,
+  // unrelated error.
+  if (lammps_has_error(static_cast<void *>(sim))) {
+    char discard[512];
+    lammps_get_last_error_message(static_cast<void *>(sim), discard, sizeof(discard));
+    return 0.0;
+  }
+  return value;
+}
+
+double LAMMPSWeb::getMemoryUsage() const noexcept {
+  auto *sim = raw();
+  if (!sim) {
+    return 0.0;
+  }
+  double meminfo[3] = {0.0, 0.0, 0.0};
+  LAMMPS_NS::Info info(sim);
+  info.get_memory_info(meminfo);
+  return meminfo[0] * 1024.0 * 1024.0;
+}
+
 double LAMMPSWeb::getComputeScalar(const std::string &id) const noexcept {
   auto *sim = raw();
   if (!sim) {
@@ -370,6 +424,11 @@ EMSCRIPTEN_BINDINGS(lammps_web_module) {
     .function("getCurrentStep", &LAMMPSWeb::getCurrentStep)
     .function("getTimestepSize", &LAMMPSWeb::getTimestepSize)
     .function("getComputeScalar", &LAMMPSWeb::getComputeScalar)
+    .function("getRunMode", &LAMMPSWeb::getRunMode)
+    .function("getRunStepsDone", &LAMMPSWeb::getRunStepsDone)
+    .function("getRunStepsTotal", &LAMMPSWeb::getRunStepsTotal)
+    .function("getThermo", &LAMMPSWeb::getThermo)
+    .function("getMemoryUsage", &LAMMPSWeb::getMemoryUsage)
     .function("syncParticles", &LAMMPSWeb::syncParticles)
     .function("syncParticlesWrapped", &LAMMPSWeb::syncParticlesWrapped)
     .function("syncBonds", &LAMMPSWeb::syncBonds)

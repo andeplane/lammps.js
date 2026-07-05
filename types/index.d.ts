@@ -63,6 +63,16 @@ export interface LAMMPSWeb {
   getCurrentStep(): number;
   getTimestepSize(): number;
   getComputeScalar(id: string): number;
+  /** update->whichflag: 0 = idle, 1 = dynamics run, 2 = minimization. */
+  getRunMode(): number;
+  /** Steps completed in the active run (0 when idle). */
+  getRunStepsDone(): number;
+  /** Total steps of the active run (0 when idle). */
+  getRunStepsTotal(): number;
+  /** Any thermo keyword as a number (e.g. "spcpu", "cpuremain", "temp"). */
+  getThermo(keyword: string): number;
+  /** Current LAMMPS memory usage estimate in bytes. */
+  getMemoryUsage(): number;
 
   syncParticles(): ParticleSnapshot;
   syncParticlesWrapped(): ParticleSnapshot;
