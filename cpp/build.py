@@ -14,7 +14,9 @@ Usage:
 Environment variables:
     EMSDK_PATH    - Path to Emscripten SDK (required)
     LAMMPS_TAG    - Git tag/branch for LAMMPS (default: patch_10Sep2025)
-    PACKAGES      - Space-separated list of LAMMPS packages (default: MOLECULE)
+    PACKAGES      - Space-separated list of LAMMPS packages (default: MOLECULE),
+                    or the preset "atomify" for the full set Atomify's example
+                    library needs
     SINGLE_FILE   - Set to "0" to output separate .wasm file (default: "1")
     KOKKOS        - Set to "1" to build the KOKKOS (pthreads) variant,
                     emitted as dist/cpp/lammps-kokkos.js
@@ -26,9 +28,18 @@ import shutil
 import sys
 from pathlib import Path
 
+# The package set Atomify's example library needs (PACKAGES="atomify").
+ATOMIFY_PACKAGES = (
+    "RIGID CLASS2 MANYBODY MC MOLECULE GRANULAR KSPACE SHOCK MISC QEQ REAXFF "
+    "EXTRA-MOLECULE VORONOI COLVARS"
+)
+
 # Configuration
 LAMMPS_TAG = os.environ.get("LAMMPS_TAG", "patch_10Sep2025")
-PACKAGES = os.environ.get("PACKAGES", "MOLECULE").split()
+_packages_env = os.environ.get("PACKAGES", "MOLECULE")
+if _packages_env.strip().lower() == "atomify":
+    _packages_env = ATOMIFY_PACKAGES
+PACKAGES = _packages_env.split()
 SINGLE_FILE = os.environ.get("SINGLE_FILE", "1") == "1"
 KOKKOS = os.environ.get("KOKKOS", "0") == "1"
 
@@ -128,6 +139,14 @@ def copy_custom_sources() -> None:
             if src.exists():
                 copy_if_changed(src, dst)
 
+    # Extra standalone LAMMPS styles (e.g. moltemplate's custom pair styles)
+    # that are not part of upstream LAMMPS.
+    extra_dir = BASE_DIR / "extra_src"
+    if extra_dir.is_dir():
+        for src in sorted(extra_dir.iterdir()):
+            if src.suffix in (".cpp", ".h"):
+                copy_if_changed(src, SRC_DIR / src.name)
+
 
 def remove_broken_imd() -> None:
     """Remove fix_imd which doesn't work in WebAssembly."""
@@ -176,6 +195,8 @@ def configure_cmake(emsdk_env: str, debug_mode: bool = False) -> None:
 
     # Compiler flags
     cc_flags_common = "-DLAMMPS_EXCEPTIONS -s NO_DISABLE_EXCEPTION_CATCHING=1"
+    if "COLVARS" in packages:
+        cc_flags_common += " -DCOLVARS_LAMMPS"
     if KOKKOS:
         cc_flags_common = f"{KOKKOS_CC_FLAGS} {cc_flags_common}"
 
@@ -198,6 +219,10 @@ def configure_cmake(emsdk_env: str, debug_mode: bool = False) -> None:
         f'-DCMAKE_C_FLAGS="{cc_flags}"',
     ] + package_flags
 
+    if "VORONOI" in packages:
+        # Let CMake download and cross-compile Voro++ automatically.
+        cmake_args.append("-DDOWNLOAD_VORO=ON")
+
     if KOKKOS:
         cmake_args += [
             "-DKokkos_ENABLE_THREADS=ON",
@@ -217,12 +242,40 @@ def configure_cmake(emsdk_env: str, debug_mode: bool = False) -> None:
 def build_lammps_library(emsdk_env: str) -> None:
     """Build the LAMMPS library using CMake."""
     print("Building LAMMPS library...")
-    
+
     jobs = os.cpu_count() or 1
     build_cmd = f'source {emsdk_env} && cd {BUILD_DIR} && cmake --build . --target lammps -j{jobs}'
-    
+
     subprocess.run(build_cmd, shell=True, executable="/bin/bash", check=True)
+    fix_voro_archive(emsdk_env)
     print("LAMMPS library build complete!")
+
+
+def fix_voro_archive(emsdk_env: str) -> None:
+    """Re-archive Voro++ with emar.
+
+    Voro++'s Makefile (driven by LAMMPS' DOWNLOAD_VORO external project) uses
+    the host `ar`, which on macOS silently drops LLVM bitcode members (the
+    LTO objects emcc produces) — leaving a 96-byte archive and undefined
+    voro:: symbols at link time. Rebuild the archive with emsdk's emar.
+    """
+    voro_src = BUILD_DIR / "voro_build-prefix" / "src" / "voro_build" / "src"
+    archive = voro_src / "libvoro++.a"
+    if not voro_src.is_dir():
+        return
+
+    objects = sorted(
+        obj for obj in voro_src.glob("*.o")
+        if obj.name not in ("cmd_line.o", "voro++.o")  # command-line tool, not library
+    )
+    if not objects:
+        return
+
+    archive.unlink(missing_ok=True)
+    object_args = " ".join(str(obj) for obj in objects)
+    emar_cmd = f'source {emsdk_env} && emar rcs {archive} {object_args}'
+    subprocess.run(emar_cmd, shell=True, executable="/bin/bash", check=True)
+    print(f"Re-archived Voro++ with emar ({len(objects)} objects)")
 
 
 def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
@@ -314,6 +367,19 @@ def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
         str(lib_abs_path),
         "-Wl,--no-whole-archive",
     ])
+
+    # Helper archives some packages build alongside liblammps.a
+    # (COLVARS -> liblammps_colvars.a + liblammps_lepton.a,
+    #  VORONOI with DOWNLOAD_VORO -> libvoro++.a).
+    extra_libs = sorted(
+        lib
+        for lib in BUILD_DIR.glob("liblammps_*.a")
+        if lib.resolve() != lib_abs_path
+    )
+    extra_libs += sorted(BUILD_DIR.glob("voro_build-prefix/**/libvoro++.a"))
+    for lib in extra_libs:
+        emcc_args.append(str(lib.resolve()))
+        print(f"Linking helper archive: {lib.name}")
 
     # The KOKKOS build produces separate Kokkos static libraries that
     # liblammps.a depends on (regular archive linking is enough for these).
