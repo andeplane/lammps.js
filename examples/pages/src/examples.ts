@@ -4,8 +4,9 @@ export interface Example {
   /** How often (in timesteps) the async step callback yields to the UI. */
   every?: number;
   /**
-   * Run on the multithreaded KOKKOS build. The thread count comes from
-   * the UI dropdown (passed to LAMMPS as `-k on t N`), not the script.
+   * Default state of the Multithreading checkbox when this example is
+   * selected. When enabled, the run uses the KOKKOS build and the thread
+   * count from the UI dropdown (passed to LAMMPS as `-k on t N`).
    */
   kokkos?: boolean;
 }

@@ -4,6 +4,7 @@ import { examples } from "./examples";
 
 // Get DOM elements
 const selectEl = document.getElementById("example-select") as HTMLSelectElement;
+const multithreadEl = document.getElementById("multithread-checkbox") as HTMLInputElement;
 const threadsLabelEl = document.getElementById("threads-label") as HTMLLabelElement;
 const threadsSelectEl = document.getElementById("threads-select") as HTMLSelectElement;
 const runBtn = document.getElementById("run-btn") as HTMLButtonElement;
@@ -18,7 +19,7 @@ examples.forEach((ex, i) => {
   selectEl.appendChild(opt);
 });
 
-// Thread choices for KOKKOS examples: powers of two up to the module's
+// Thread choices for multithreaded (KOKKOS) runs: powers of two up to the module's
 // pthread pool size (8), defaulting to the hardware concurrency. The
 // selection is passed to LAMMPS as `-k on t N` when the client starts —
 // it is not part of the script.
@@ -34,10 +35,18 @@ for (let threads = 1; threads <= MAX_KOKKOS_THREADS; threads *= 2) {
   threadsSelectEl.appendChild(opt);
 }
 
-// Show code for selected example (editable — running uses the textarea contents)
+// The threads dropdown is only shown while multithreading is enabled.
+function updateThreadsVisibility() {
+  threadsLabelEl.classList.toggle("visible", multithreadEl.checked);
+}
+multithreadEl.addEventListener("change", updateThreadsVisibility);
+
+// Show code for selected example (editable — running uses the textarea contents).
+// An example's `kokkos` flag sets the checkbox default; the user can toggle it.
 function showExample(index: number) {
   codeEl.value = examples[index].script;
-  threadsLabelEl.classList.toggle("visible", Boolean(examples[index].kokkos));
+  multithreadEl.checked = Boolean(examples[index].kokkos);
+  updateThreadsVisibility();
 }
 showExample(0);
 
@@ -85,7 +94,7 @@ runBtn.addEventListener("click", async () => {
   const every = example?.every ?? 100;
 
   let kokkos: { threads: number } | undefined;
-  if (example?.kokkos) {
+  if (multithreadEl.checked) {
     if (crossOriginIsolated) {
       kokkos = { threads: Number(threadsSelectEl.value) || 1 };
       appendLine(`Running on the KOKKOS build with ${kokkos.threads} thread(s).\n`);
