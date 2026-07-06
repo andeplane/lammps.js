@@ -3,6 +3,14 @@
   "version": "1.4.0",
   "description": "Run LAMMPS directly in the browser — a WebAssembly build with TypeScript-ready bindings.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lammps/lammps.js.git"
+  },
+  "homepage": "https://editor.lammps.org",
+  "bugs": {
+    "url": "https://github.com/lammps/lammps.js/issues"
+  },
   "type": "module",
   "exports": {
     ".": {
