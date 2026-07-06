@@ -52,6 +52,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      # OIDC trusted publishing needs npm >= 11.5.1; the npm bundled with
+      # node 20 (10.x) has no OIDC support and fails with ENEEDAUTH.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
 
       - name: Install deps
         run: npm ci
@@ -70,8 +76,12 @@ jobs:
           export EMSDK_PATH="$HOME/emsdk"
           npm run test:kokkos
 
+      # No emsdk_env sourcing here: it would put emsdk's bundled (old) npm
+      # first on PATH, and publishing only needs the already-built dist/.
       - name: Publish package
         if: success() && steps.version_check.outputs.changed == 'true'
-        run: |
-          source "$HOME/emsdk/emsdk_env.sh"
-          npm publish --provenance
+        run: npm publish --provenance
+        env:
+          # setup-node's registry-url writes an .npmrc referencing this
+          # variable; it must exist (empty) for OIDC publishing to proceed.
+          NODE_AUTH_TOKEN: ""
