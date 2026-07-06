@@ -72,13 +72,21 @@ jobs:
           export EMSDK_PATH="$HOME/emsdk"
           npm test
 
-      # The published package ships both wasm variants; build KOKKOS after
-      # the serial build so dist/ contains dist/cpp/lammps-kokkos.js too.
+      # The published package ships all wasm variants; build KOKKOS and the
+      # atomify (full LAMMPS package set) flavor after the serial build so
+      # dist/ contains dist/cpp/lammps-kokkos.js and dist/cpp/lammps-atomify.js
+      # too — verify-pack (prepublishOnly) refuses to publish without them.
       - name: Build & test KOKKOS variant
         run: |
           source "$HOME/emsdk/emsdk_env.sh"
           export EMSDK_PATH="$HOME/emsdk"
           npm run test:kokkos
+
+      - name: Build & test atomify variant
+        run: |
+          source "$HOME/emsdk/emsdk_env.sh"
+          export EMSDK_PATH="$HOME/emsdk"
+          npm run test:atomify
 
       # No emsdk_env sourcing here: it would put emsdk's bundled (old) npm
       # first on PATH, and publishing only needs the already-built dist/.

@@ -16,7 +16,10 @@ Environment variables:
     LAMMPS_TAG    - Git tag/branch for LAMMPS (default: patch_10Sep2025)
     PACKAGES      - Space-separated list of LAMMPS packages (default: MOLECULE),
                     or the preset "atomify" for the full set Atomify's example
-                    library needs
+                    library needs. The atomify preset is a distinct build
+                    variant (like KOKKOS): it builds into its own directory
+                    and links to dist/cpp/lammps-atomify.js, alongside
+                    (not instead of) the default dist/cpp/lammps.js.
     SINGLE_FILE   - Set to "0" to output separate .wasm file (default: "1")
     KOKKOS        - Set to "1" to build the KOKKOS (pthreads) variant,
                     emitted as dist/cpp/lammps-kokkos.js
@@ -37,17 +40,26 @@ ATOMIFY_PACKAGES = (
 # Configuration
 LAMMPS_TAG = os.environ.get("LAMMPS_TAG", "patch_10Sep2025")
 _packages_env = os.environ.get("PACKAGES", "MOLECULE")
-if _packages_env.strip().lower() == "atomify":
+IS_ATOMIFY_VARIANT = _packages_env.strip().lower() == "atomify"
+if IS_ATOMIFY_VARIANT:
     _packages_env = ATOMIFY_PACKAGES
 PACKAGES = _packages_env.split()
 SINGLE_FILE = os.environ.get("SINGLE_FILE", "1") == "1"
 KOKKOS = os.environ.get("KOKKOS", "0") == "1"
 
+if KOKKOS and IS_ATOMIFY_VARIANT:
+    sys.exit("ERROR: KOKKOS=1 with PACKAGES=atomify is not a supported combination.")
+
 BASE_DIR = Path(__file__).resolve().parent
 LAMMPS_DIR = BASE_DIR / "lammps"
 SRC_DIR = LAMMPS_DIR / "src"
 PATCHES_DIR = BASE_DIR / "patches"
-BUILD_DIR = BASE_DIR / ("build_emscripten_kokkos" if KOKKOS else "build_emscripten")
+if KOKKOS:
+    BUILD_DIR = BASE_DIR / "build_emscripten_kokkos"
+elif IS_ATOMIFY_VARIANT:
+    BUILD_DIR = BASE_DIR / "build_emscripten_atomify"
+else:
+    BUILD_DIR = BASE_DIR / "build_emscripten"
 
 # KOKKOS needs 64-bit pointers (MEMORY64=2 keeps a wasm32 binary) and pthreads.
 KOKKOS_CC_FLAGS = "-pthread -sMEMORY64=2"
@@ -223,6 +235,18 @@ def configure_cmake(emsdk_env: str, debug_mode: bool = False) -> None:
         # Let CMake download and cross-compile Voro++ automatically.
         cmake_args.append("-DDOWNLOAD_VORO=ON")
 
+    if "COLVARS" in packages or "LEPTON" in packages:
+        # These packages pull in Lepton, whose CMake auto-enables an
+        # asmjit-based JIT when the *host* is x86_64
+        # (CMAKE_HOST_SYSTEM_PROCESSOR) — with no regard for the wasm target.
+        # That JIT emits __builtin___clear_cache (an x86/ARM instruction-cache
+        # flush), which becomes the llvm.clear_cache intrinsic that wasm-ld's
+        # LTO cannot lower ("not supported on wasm"). It is dead weight on wasm
+        # anyway — asmjit has no wasm backend, so Lepton falls back to its
+        # interpreter at runtime — so force it off. (This is why the build
+        # succeeds on an arm64 host but fails on an x86_64 host like CI.)
+        cmake_args.append("-DLEPTON_ENABLE_JIT=OFF")
+
     if KOKKOS:
         cmake_args += [
             "-DKokkos_ENABLE_THREADS=ON",
@@ -293,7 +317,12 @@ def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
     locate_file_abs = (BASE_DIR / "locateFile.js").resolve()
 
     # Output file - must land in dist/cpp/ so that dist/client.js can import ./cpp/lammps.js
-    output_name = "lammps-kokkos.js" if KOKKOS else "lammps.js"
+    if KOKKOS:
+        output_name = "lammps-kokkos.js"
+    elif IS_ATOMIFY_VARIANT:
+        output_name = "lammps-atomify.js"
+    else:
+        output_name = "lammps.js"
     output_file = BASE_DIR.parent / "dist" / "cpp" / output_name
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -446,8 +475,14 @@ def main():
     # Link WASM module
     link_wasm_module(emsdk_env, debug_mode=debug_mode)
     
+    if KOKKOS:
+        output_name = "lammps-kokkos.js"
+    elif IS_ATOMIFY_VARIANT:
+        output_name = "lammps-atomify.js"
+    else:
+        output_name = "lammps.js"
     print("\nBuild complete!")
-    print(f"Output: {BASE_DIR.parent / 'dist' / 'cpp' / 'lammps.js'}")
+    print(f"Output: {BASE_DIR.parent / 'dist' / 'cpp' / output_name}")
 
 
 if __name__ == "__main__":

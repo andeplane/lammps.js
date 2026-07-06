@@ -1,6 +1,6 @@
 {
   "name": "lammps.js",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Run LAMMPS directly in the browser — a WebAssembly build with TypeScript-ready bindings.",
   "license": "MIT",
   "repository": {
@@ -26,7 +26,8 @@
       "default": "./dist/worker.js"
     },
     "./wasm": "./dist/cpp/lammps.js",
-    "./wasm-kokkos": "./dist/cpp/lammps-kokkos.js"
+    "./wasm-kokkos": "./dist/cpp/lammps-kokkos.js",
+    "./wasm-atomify": "./dist/cpp/lammps-atomify.js"
   },
   "types": "./dist/types/index.d.ts",
   "files": [
@@ -38,14 +39,17 @@
   "scripts": {
     "build:wasm": "python3 cpp/build.py",
     "build:wasm:kokkos": "KOKKOS=1 python3 cpp/build.py",
+    "build:wasm:atomify": "PACKAGES=atomify python3 cpp/build.py",
     "build:dist": "tsc -p tsconfig.build.json && npm run copy:types",
-    "copy:types": "mkdir -p dist/types dist/cpp && cp types/index.d.ts types/client.d.ts dist/types/ && cp cpp/lammps.d.ts cpp/lammps-kokkos.d.ts dist/cpp/ && node scripts/ensure-kokkos-stub.mjs",
+    "copy:types": "mkdir -p dist/types dist/cpp && cp types/index.d.ts types/client.d.ts dist/types/ && cp cpp/lammps.d.ts cpp/lammps-kokkos.d.ts cpp/lammps-atomify.d.ts dist/cpp/ && node scripts/ensure-wasm-stubs.mjs",
     "build": "npm run build:wasm && npm run build:dist",
     "build:kokkos": "npm run build:wasm:kokkos && npm run build:dist",
+    "build:atomify": "npm run build:wasm:atomify && npm run build:dist",
     "verify:pack": "node scripts/verify-pack.mjs",
     "prepublishOnly": "node scripts/verify-pack.mjs",
     "test": "npm run build && vitest run",
     "test:kokkos": "npm run build:kokkos && vitest run tests/kokkos.spec.ts",
+    "test:atomify": "npm run build:atomify && vitest run tests/atomify.spec.ts",
     "test:watch": "vitest watch"
   },
   "devDependencies": {

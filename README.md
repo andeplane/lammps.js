@@ -14,21 +14,26 @@ LAMMPS in the browser. WebAssembly build + a small TS-friendly client.
 npm install lammps.js
 ```
 
-The default build enables the MOLECULE package. If your scripts need more of
-LAMMPS, install the **atomify flavor** instead — same code and API, built with
+The default build (`.`, `./wasm`) enables the MOLECULE package. If your
+scripts need more of LAMMPS, the same package also ships an **atomify wasm
+build** under `./wasm-atomify` — same code and API, built with
 `PACKAGES=atomify` (RIGID CLASS2 MANYBODY MC MOLECULE GRANULAR KSPACE SHOCK
 MISC QEQ REAXFF EXTRA-MOLECULE VORONOI COLVARS, plus moltemplate's extra pair
 styles). It is bigger (~19 MB module vs ~11 MB) and ships the serial module
 only (no KOKKOS variant):
 
-```bash
-npm install lammps.js-atomify
-# or, to keep imports unchanged, alias it:
-npm install lammps.js@npm:lammps.js-atomify
+```ts
+import createModule from "lammps.js/wasm-atomify";
+
+const wasm = await createModule({ print: console.log, printErr: console.error });
+const lammps = new wasm.LAMMPSWeb();
+lammps.start();
+lammps.runScript("pair_style vashishta\n"); // MANYBODY — not in the default build
 ```
 
-Both flavors are published from this repository at the same version
-(`release.yml` / `release-atomify.yml`).
+There is no separate `LammpsClient` entry point for this variant yet; use the
+wasm module directly as above, or the equivalent low-level calls shown in
+[Usage (manual stepping, optional)](#usage-manual-stepping-optional).
 
 ## Usage (main flow: `runScriptAsync`)
 
@@ -257,21 +262,28 @@ lammps.dispose();
 ## Build
 
 ```bash
-npm run build          # serial wasm module + TypeScript
-npm run build:kokkos   # multithreaded KOKKOS wasm module + TypeScript
+npm run build           # serial wasm module + TypeScript
+npm run build:kokkos    # multithreaded KOKKOS wasm module + TypeScript
+npm run build:atomify   # full-package-set (atomify) wasm module + TypeScript
 ```
 
 Outputs go straight into `dist/`:
-- `dist/cpp/lammps.js` (single-file wasm module)
+- `dist/cpp/lammps.js` (single-file wasm module, MOLECULE package)
 - `dist/cpp/lammps-kokkos.js` (single-file KOKKOS/pthreads wasm module)
+- `dist/cpp/lammps-atomify.js` (single-file wasm module, full package set)
 - `dist/client.js`
 - `dist/**/*.d.ts`
+
+A full publish builds and ships all three (see `.github/workflows/release.yml`);
+`npm run build` alone is enough for local development against the default
+package set.
 
 ## Tests
 
 ```bash
-npm test               # serial build + full suite
-npm run test:kokkos    # KOKKOS build + KOKKOS suite
+npm test                # serial build + full suite
+npm run test:kokkos     # KOKKOS build + KOKKOS suite
+npm run test:atomify    # atomify build + atomify suite
 ```
 
 ## Agent skill
