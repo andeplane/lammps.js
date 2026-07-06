@@ -13,6 +13,22 @@ LAMMPS in the browser. WebAssembly build + a small TS-friendly client.
 npm install lammps.js
 ```
 
+The default build enables the MOLECULE package. If your scripts need more of
+LAMMPS, install the **atomify flavor** instead — same code and API, built with
+`PACKAGES=atomify` (RIGID CLASS2 MANYBODY MC MOLECULE GRANULAR KSPACE SHOCK
+MISC QEQ REAXFF EXTRA-MOLECULE VORONOI COLVARS, plus moltemplate's extra pair
+styles). It is bigger (~19 MB module vs ~11 MB) and ships the serial module
+only (no KOKKOS variant):
+
+```bash
+npm install lammps.js-atomify
+# or, to keep imports unchanged, alias it:
+npm install lammps.js@npm:lammps.js-atomify
+```
+
+Both flavors are published from this repository at the same version
+(`release.yml` / `release-atomify.yml`).
+
 ## Usage (main flow: `runScriptAsync`)
 
 `runScriptAsync()` is the main API.

@@ -51,10 +51,13 @@ if (missing.length > 0) {
 }
 
 // The wasm entry points must be real emscripten modules, not stubs.
-// dist/cpp/lammps-kokkos.js is allowed to be a stub only if it is not the
-// primary export; the published package is expected to ship both variants,
-// so treat a stub there as an error too.
-for (const wasmFile of ["dist/cpp/lammps.js", "dist/cpp/lammps-kokkos.js"]) {
+// lammps.js ships both variants; the lammps.js-atomify flavor ships the
+// serial module only, so its kokkos entry is expected to be the stub.
+const requiredWasm = ["dist/cpp/lammps.js"];
+if (pkg.name !== "lammps.js-atomify") {
+  requiredWasm.push("dist/cpp/lammps-kokkos.js");
+}
+for (const wasmFile of requiredWasm) {
   const content = readFileSync(join(root, wasmFile), "utf8");
   if (content.startsWith(`// ${STUB_MARKER}`)) {
     console.error(
