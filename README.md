@@ -5,7 +5,8 @@
 
 LAMMPS in the browser. WebAssembly build + a small TS-friendly client.
 
-**[Try in your browser →](https://editor.lammps.org/)**
+**[Interactive docs →](https://editor.lammps.org/docs/)** — every API with live, editable examples
+&nbsp;·&nbsp; **[Playground →](https://editor.lammps.org/)**
 
 ## Install
 
@@ -272,6 +273,18 @@ Outputs go straight into `dist/`:
 npm test               # serial build + full suite
 npm run test:kokkos    # KOKKOS build + KOKKOS suite
 ```
+
+## Agent skill
+
+Teach AI coding agents (Claude Code, Cursor, Codex, …) how to use lammps.js:
+
+```bash
+npx skills add lammps/lammps.js
+```
+
+This installs the [`lammps-js` skill](skills/lammps-js/SKILL.md) — a compact
+usage guide covering `runScriptAsync`, worker mode, KOKKOS, snapshots and the
+common pitfalls — into your project's agent config.
 
 ## Example
 
