@@ -1,10 +1,14 @@
-// Exercises the atomify wasm build (dist/cpp/lammps-atomify.js), the flavor
-// built with PACKAGES=atomify (the full LAMMPS package set Atomify's example
-// library needs: RIGID CLASS2 MANYBODY MC MOLECULE GRANULAR KSPACE SHOCK
-// MISC QEQ REAXFF EXTRA-MOLECULE VORONOI COLVARS + moltemplate pair styles).
-// It ships in this same package under the ./wasm-atomify export, so this
-// loads the module directly rather than through LammpsClient (which only
-// knows the default and kokkos variants).
+// @vitest-environment node
+//
+// Exercises the atomify wasm build (dist/cpp/lammps-atomify.js): a
+// multithreaded KOKKOS/pthreads build with the full LAMMPS package set
+// Atomify's example library needs (RIGID CLASS2 MANYBODY MC MOLECULE GRANULAR
+// KSPACE SHOCK MISC QEQ REAXFF EXTRA-MOLECULE VORONOI COLVARS + KOKKOS +
+// moltemplate pair styles). Runs under a plain node environment because
+// emscripten pthreads are backed by worker_threads + SharedArrayBuffer, which
+// jsdom does not provide. It ships in this same package under the
+// ./wasm-atomify export, loaded directly here (LammpsClient's kokkos option
+// targets the separate lammps-kokkos.js).
 import { afterAll, describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,34 +21,25 @@ const hasAtomifyBuild =
   // A stub emitted by scripts/ensure-wasm-stubs.mjs is not a real build.
   !readFileSync(atomifyModulePath, "utf8").startsWith("// lammps.js-wasm-stub");
 
-// Hiding `process` forces the browser code path under jsdom, same trick as
-// tests/helpers/lammps.ts uses for the default variant.
-type GlobalWithProcess = { process?: unknown };
-const globalScope = globalThis as unknown as GlobalWithProcess;
-
 let modulePromise: Promise<LammpsModule> | null = null;
 async function loadAtomifyModule(): Promise<LammpsModule> {
   if (!modulePromise) {
     modulePromise = (async () => {
-      const originalProcess = globalScope.process;
-      const hadProcess = typeof originalProcess !== "undefined";
-      globalScope.process = undefined;
-      try {
-        const { default: createModule } = await import("../dist/cpp/lammps-atomify.js");
-        return await createModule({ print: () => undefined, printErr: () => undefined });
-      } finally {
-        if (hadProcess) globalScope.process = originalProcess;
-        else delete globalScope.process;
-      }
+      const { default: createModule } = await import("../dist/cpp/lammps-atomify.js");
+      return createModule({ print: () => undefined, printErr: () => undefined });
     })();
   }
   return modulePromise;
 }
 
 const instances: LAMMPSWeb[] = [];
-async function createInstance(): Promise<LAMMPSWeb> {
+// Start with the Kokkos runtime enabled (2 threads) and the kk accelerator
+// suffix, so styles with a /kk variant run multithreaded and the rest fall
+// back to their serial version.
+async function createInstance(threads = 2): Promise<LAMMPSWeb> {
   const wasm = await loadAtomifyModule();
   const instance = new wasm.LAMMPSWeb();
+  instance.startWithArgs(["-k", "on", "t", String(threads), "-sf", "kk"]);
   instances.push(instance);
   return instance;
 }
@@ -55,20 +50,47 @@ afterAll(() => {
   }
 });
 
-describe.skipIf(!hasAtomifyBuild)("atomify wasm build (PACKAGES=atomify)", () => {
-  it("includes every package Atomify's examples need", async () => {
-    const lmp = await createInstance();
+describe.skipIf(!hasAtomifyBuild)("atomify wasm build (KOKKOS + full package set)", () => {
+  it("includes KOKKOS and every package Atomify's examples need", async () => {
+    const wasm = await loadAtomifyModule();
+    const lmp = new wasm.LAMMPSWeb();
+    instances.push(lmp);
     for (const pkg of [
-      "RIGID", "CLASS2", "MANYBODY", "MC", "MOLECULE", "GRANULAR", "KSPACE",
-      "SHOCK", "MISC", "QEQ", "REAXFF", "EXTRA-MOLECULE", "VORONOI", "COLVARS",
+      "KOKKOS", "RIGID", "CLASS2", "MANYBODY", "MC", "MOLECULE", "GRANULAR",
+      "KSPACE", "SHOCK", "MISC", "QEQ", "REAXFF", "EXTRA-MOLECULE", "VORONOI",
+      "COLVARS",
     ]) {
       expect(lmp.hasPackage(pkg)).toBe(true);
     }
   });
 
+  it("runs a plain LJ script multithreaded via the kk suffix", async () => {
+    const lmp = await createInstance(2);
+    lmp.runScript(`
+units lj
+atom_style atomic
+lattice fcc 0.8442
+region box block 0 4 0 4 0 4
+create_box 1 box
+create_atoms 1 box
+mass 1 1.0
+velocity all create 1.44 87287
+pair_style lj/cut 2.5
+pair_coeff 1 1 1.0 1.0 2.5
+fix nve all nve
+run 5 post no
+`);
+    expect(lmp.getCurrentStep()).toBe(5);
+    // Raw LAMMPSWeb.syncParticles() returns BufferView snapshots (ptr/length
+    // into the heap), not typed arrays.
+    const { count, positions } = lmp.syncParticles();
+    expect(count).toBe(256); // 4 atoms/cell * 4^3 fcc cells
+    expect(positions.length).toBe(count * 3);
+    expect(positions.ptr).toBeGreaterThan(0);
+  });
+
   it("runs a MANYBODY (vashishta) pair style", async () => {
-    const lmp = await createInstance();
-    lmp.start();
+    const lmp = await createInstance(2);
     expect(() =>
       lmp.runScript(`
 units metal
@@ -84,8 +106,7 @@ pair_style vashishta
   });
 
   it("accepts the vendored moltemplate pair style", async () => {
-    const lmp = await createInstance();
-    lmp.start();
+    const lmp = await createInstance(2);
     expect(() =>
       lmp.runScript(`
 units real

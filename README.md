@@ -19,15 +19,20 @@ scripts need more of LAMMPS, the same package also ships an **atomify wasm
 build** under `./wasm-atomify` — same code and API, built with
 `PACKAGES=atomify` (RIGID CLASS2 MANYBODY MC MOLECULE GRANULAR KSPACE SHOCK
 MISC QEQ REAXFF EXTRA-MOLECULE VORONOI COLVARS, plus moltemplate's extra pair
-styles). It is bigger (~19 MB module vs ~11 MB) and ships the serial module
-only (no KOKKOS variant):
+styles). It is a **multithreaded KOKKOS build**, so it combines Kokkos
+acceleration with the full package set — and, like the KOKKOS variant, it
+needs a [cross-origin-isolated](#required-headers-browsers-only) context
+(`SharedArrayBuffer`) to run in the browser. It is larger (~41 MB module,
+~10 MB gzipped) than the default (~11 MB):
 
 ```ts
 import createModule from "lammps.js/wasm-atomify";
 
 const wasm = await createModule({ print: console.log, printErr: console.error });
 const lammps = new wasm.LAMMPSWeb();
-lammps.start();
+// Enable Kokkos threads and the kk accelerator suffix (styles with a /kk
+// variant run multithreaded; the rest fall back to serial).
+lammps.startWithArgs(["-k", "on", "t", "4", "-sf", "kk"]);
 lammps.runScript("pair_style vashishta\n"); // MANYBODY — not in the default build
 ```
 
@@ -264,13 +269,13 @@ lammps.dispose();
 ```bash
 npm run build           # serial wasm module + TypeScript
 npm run build:kokkos    # multithreaded KOKKOS wasm module + TypeScript
-npm run build:atomify   # full-package-set (atomify) wasm module + TypeScript
+npm run build:atomify   # multithreaded KOKKOS + full-package-set wasm module + TypeScript
 ```
 
 Outputs go straight into `dist/`:
 - `dist/cpp/lammps.js` (single-file wasm module, MOLECULE package)
 - `dist/cpp/lammps-kokkos.js` (single-file KOKKOS/pthreads wasm module)
-- `dist/cpp/lammps-atomify.js` (single-file wasm module, full package set)
+- `dist/cpp/lammps-atomify.js` (single-file KOKKOS/pthreads wasm module, full package set)
 - `dist/client.js`
 - `dist/**/*.d.ts`
 

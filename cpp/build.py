@@ -17,9 +17,12 @@ Environment variables:
     PACKAGES      - Space-separated list of LAMMPS packages (default: MOLECULE),
                     or the preset "atomify" for the full set Atomify's example
                     library needs. The atomify preset is a distinct build
-                    variant (like KOKKOS): it builds into its own directory
-                    and links to dist/cpp/lammps-atomify.js, alongside
-                    (not instead of) the default dist/cpp/lammps.js.
+                    variant that links to dist/cpp/lammps-atomify.js, alongside
+                    (not instead of) the default dist/cpp/lammps.js. It is a
+                    multithreaded KOKKOS build (pthreads), so it combines
+                    Kokkos acceleration with the full package set and, like
+                    the KOKKOS variant, needs a cross-origin-isolated context
+                    (SharedArrayBuffer) at runtime.
     SINGLE_FILE   - Set to "0" to output separate .wasm file (default: "1")
     KOKKOS        - Set to "1" to build the KOKKOS (pthreads) variant,
                     emitted as dist/cpp/lammps-kokkos.js
@@ -47,17 +50,24 @@ PACKAGES = _packages_env.split()
 SINGLE_FILE = os.environ.get("SINGLE_FILE", "1") == "1"
 KOKKOS = os.environ.get("KOKKOS", "0") == "1"
 
-if KOKKOS and IS_ATOMIFY_VARIANT:
-    sys.exit("ERROR: KOKKOS=1 with PACKAGES=atomify is not a supported combination.")
+# The atomify variant is a multithreaded (KOKKOS/pthreads) build with the
+# full package set — so consumers get both Kokkos acceleration and all the
+# packages Atomify's examples need from a single module. WANT_KOKKOS gates
+# all the pthreads/MEMORY64 build machinery; it is true for the standalone
+# KOKKOS variant and for the atomify variant.
+WANT_KOKKOS = KOKKOS or IS_ATOMIFY_VARIANT
 
 BASE_DIR = Path(__file__).resolve().parent
 LAMMPS_DIR = BASE_DIR / "lammps"
 SRC_DIR = LAMMPS_DIR / "src"
 PATCHES_DIR = BASE_DIR / "patches"
-if KOKKOS:
-    BUILD_DIR = BASE_DIR / "build_emscripten_kokkos"
-elif IS_ATOMIFY_VARIANT:
+# Each variant gets its own build dir (its compile flags differ). The atomify
+# variant takes precedence over a bare KOKKOS=1 since it is itself a Kokkos
+# build with a superset of packages.
+if IS_ATOMIFY_VARIANT:
     BUILD_DIR = BASE_DIR / "build_emscripten_atomify"
+elif KOKKOS:
+    BUILD_DIR = BASE_DIR / "build_emscripten_kokkos"
 else:
     BUILD_DIR = BASE_DIR / "build_emscripten"
 
@@ -201,7 +211,7 @@ def configure_cmake(emsdk_env: str, debug_mode: bool = False) -> None:
         sys.exit(f"ERROR: CMake source directory not found: {cmake_source_abs}")
     
     # Build package flags
-    packages = PACKAGES + (["KOKKOS"] if KOKKOS and "KOKKOS" not in PACKAGES else [])
+    packages = PACKAGES + (["KOKKOS"] if WANT_KOKKOS and "KOKKOS" not in PACKAGES else [])
     package_flags = [f"-DPKG_{pkg}=ON" for pkg in packages]
     print(f"Enabling packages: {', '.join(packages)}")
 
@@ -209,7 +219,7 @@ def configure_cmake(emsdk_env: str, debug_mode: bool = False) -> None:
     cc_flags_common = "-DLAMMPS_EXCEPTIONS -s NO_DISABLE_EXCEPTION_CATCHING=1"
     if "COLVARS" in packages:
         cc_flags_common += " -DCOLVARS_LAMMPS"
-    if KOKKOS:
+    if WANT_KOKKOS:
         cc_flags_common = f"{KOKKOS_CC_FLAGS} {cc_flags_common}"
 
     if debug_mode:
@@ -247,7 +257,7 @@ def configure_cmake(emsdk_env: str, debug_mode: bool = False) -> None:
         # succeeds on an arm64 host but fails on an x86_64 host like CI.)
         cmake_args.append("-DLEPTON_ENABLE_JIT=OFF")
 
-    if KOKKOS:
+    if WANT_KOKKOS:
         cmake_args += [
             "-DKokkos_ENABLE_THREADS=ON",
             "-DKokkos_ENABLE_LIBDL=OFF",  # no dynamic loading in WebAssembly
@@ -317,10 +327,10 @@ def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
     locate_file_abs = (BASE_DIR / "locateFile.js").resolve()
 
     # Output file - must land in dist/cpp/ so that dist/client.js can import ./cpp/lammps.js
-    if KOKKOS:
-        output_name = "lammps-kokkos.js"
-    elif IS_ATOMIFY_VARIANT:
+    if IS_ATOMIFY_VARIANT:
         output_name = "lammps-atomify.js"
+    elif KOKKOS:
+        output_name = "lammps-kokkos.js"
     else:
         output_name = "lammps.js"
     output_file = BASE_DIR.parent / "dist" / "cpp" / output_name
@@ -356,7 +366,7 @@ def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
     # Async support
     emcc_args.extend(["-s", "ASYNCIFY"])
 
-    if KOKKOS:
+    if WANT_KOKKOS:
         emcc_args.extend([
             "-pthread",
             "-s", "MEMORY64=2",
@@ -412,7 +422,7 @@ def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
 
     # The KOKKOS build produces separate Kokkos static libraries that
     # liblammps.a depends on (regular archive linking is enough for these).
-    if KOKKOS:
+    if WANT_KOKKOS:
         kokkos_libs = sorted(BUILD_DIR.glob("lib/kokkos/**/*.a"))
         if not kokkos_libs:
             sys.exit("ERROR: Kokkos libraries not found in build directory")
@@ -475,10 +485,10 @@ def main():
     # Link WASM module
     link_wasm_module(emsdk_env, debug_mode=debug_mode)
     
-    if KOKKOS:
-        output_name = "lammps-kokkos.js"
-    elif IS_ATOMIFY_VARIANT:
+    if IS_ATOMIFY_VARIANT:
         output_name = "lammps-atomify.js"
+    elif KOKKOS:
+        output_name = "lammps-kokkos.js"
     else:
         output_name = "lammps.js"
     print("\nBuild complete!")
