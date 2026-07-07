@@ -13,6 +13,13 @@ if [ ! -f "$REPO_ROOT/dist/client.js" ] || [ ! -s "$REPO_ROOT/dist/cpp/lammps.js
 fi
 
 rm -rf "$OUT" .jupyterlite.doit.db
+
+# Build the `lammps-js` Python bindings wheel (repo-root python/) into
+# pypi/, which `jupyter lite build` picks up automatically for the
+# in-browser pip (piplite) — notebooks then `%pip install lammps-js`.
+rm -rf pypi
+python3 -m build --wheel --outdir pypi "$REPO_ROOT/python"
+
 jupyter lite build --contents content --output-dir "$OUT"
 
 # The notebooks import the client from {site}/lammps/client.js; ship the

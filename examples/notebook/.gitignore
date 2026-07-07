@@ -2,3 +2,5 @@ dist/
 .venv/
 .jupyterlite.doit.db
 _output/
+pypi/
+.cache/

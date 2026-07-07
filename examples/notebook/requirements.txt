@@ -1,9 +1,10 @@
-# JupyterLite site with the JavaScript kernel.
-# The kernel is pinned to a 0.4.0 pre-release on purpose: it is the first
-# version whose kernels support `await` and dynamic `import()` in cells
-# (the 0.3.0 kernel does a bare eval in a web worker, where neither works),
-# which the lammps.js notebooks depend on.
+# JupyterLite site with the Python (Pyodide) kernel. The notebooks drive
+# lammps.js through the bundled `lammps-js` Python bindings (repo-root
+# python/), which mirror the official LAMMPS Python module.
 jupyterlite-core==0.8.0
-jupyterlite-javascript-kernel==0.4.0a4
+jupyterlite-pyodide-kernel==0.8.1
 # Needed by `jupyter lite build --contents` to index the content directory.
 jupyter-server~=2.19
+# Builds the `lammps-js` Python bindings wheel that build.sh bundles into
+# the site's pypi/ index.
+build~=1.2

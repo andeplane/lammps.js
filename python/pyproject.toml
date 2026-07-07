@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lammps-js"
+# Tracks the lammps.js npm package version this binding is developed against.
+version = "1.5.0"
+description = "LAMMPS Python bindings for the browser: drives the lammps.js WebAssembly engine from a Pyodide kernel (JupyterLite), mirroring the official `lammps` Python module API (imports as `lammps`)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy"]
+
+[project.urls]
+Homepage = "https://github.com/lammps/lammps.js"
+Documentation = "https://editor.lammps.org/notebook/"
+
+[tool.setuptools]
+packages = ["lammps"]

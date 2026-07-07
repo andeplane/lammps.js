@@ -104,7 +104,7 @@ Temporary Items
 # Linux trash folder which might appear on any partition or disk
 .Trash-*
 
-lammps
+/lammps
 web/js/lmp.*
 .npm
 build
@@ -129,3 +129,4 @@ cpp/locateFile.js
 
 # Copied from node_modules by the pages demo build (npm run copy:coi)
 examples/pages/public/coi-serviceworker.min.js
+*.egg-info/

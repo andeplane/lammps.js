@@ -295,12 +295,27 @@ npm run test:atomify    # atomify build + atomify suite
 ## Notebooks (JupyterLite)
 
 [editor.lammps.org/notebook](https://editor.lammps.org/notebook/) hosts Jupyter
-notebook tutorials that run LAMMPS entirely in the browser — a
-[JupyterLite](https://jupyterlite.readthedocs.io/) site with a JavaScript
-kernel, where cells drive `LammpsClient` directly. The site source lives in
-`examples/notebook/` (`content/` holds the notebooks) and deploys with the
-Pages workflow. See [NOTEBOOK_TUTORIALS.md](NOTEBOOK_TUTORIALS.md) for the
-tutorial roadmap and `examples/notebook/README.md` for building it locally.
+notebook tutorials that run LAMMPS **in Python, entirely in the browser** — a
+[JupyterLite](https://jupyterlite.readthedocs.io/) site with a Pyodide kernel.
+The notebooks use the `lammps-js` Python package (repo-root `python/`,
+`%pip install lammps-js`, imports as `lammps`), which mirrors the
+[official LAMMPS Python module](https://docs.lammps.org/Python_module.html) —
+`command`, `get_thermo`, `extract_atom` as numpy arrays, and native-style
+KOKKOS `cmdargs` for the multithreaded build:
+
+```python
+from lammps import lammps
+
+lmp = await lammps()           # one await at creation; wasm loads async
+lmp.commands_string(SCRIPT)
+lmp.command("run 100")
+x = lmp.extract_atom("x")      # numpy (natoms, 3)
+```
+
+The site source lives in `examples/notebook/` (`content/` holds the
+notebooks) and deploys with the Pages workflow. See
+[NOTEBOOK_TUTORIALS.md](NOTEBOOK_TUTORIALS.md) for the tutorial roadmap and
+`examples/notebook/README.md` for building it locally.
 
 ## Agent skill
 

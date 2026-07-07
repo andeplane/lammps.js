@@ -1,8 +1,9 @@
 # LAMMPS.js Jupyter Notebook Tutorials
 
 Plan and ideas for an in-browser notebook tutorial site at **editor.lammps.org/notebook/**,
-built with [JupyterLite](https://jupyterlite.readthedocs.io/) and its JavaScript kernel,
-running LAMMPS entirely client-side through `lammps.js`.
+built with [JupyterLite](https://jupyterlite.readthedocs.io/) and its Python
+(Pyodide) kernel, running LAMMPS entirely client-side through `lammps.js` and
+the bundled `lammps-js` Python bindings.
 
 ## Why notebooks
 
@@ -15,28 +16,30 @@ the kernel is the browser.
 ## Architecture (what the POC ships)
 
 - `examples/notebook/` holds the JupyterLite site source:
-  - `requirements.txt` — pinned `jupyterlite-core` + `jupyterlite-javascript-kernel`
-    (the kernel is pinned to a 0.4.0 pre-release: it is the first version whose
-    kernels support `await` and dynamic `import()` in cells).
+  - `requirements.txt` — pinned `jupyterlite-core` + `jupyterlite-pyodide-kernel`.
   - `content/` — the built-in notebooks, passed to `jupyter lite build --contents content`.
     Users can edit freely; changes persist in browser storage (IndexedDB), originals
     are restored with "revert to original".
   - `jupyter-lite.json` — site config.
 - The built lammps.js package (`dist/`) is copied to `notebook/lammps/` in the
-  deployed site. Notebooks load it with a dynamic import:
-
-  ```js
-  const { LammpsClient } = await import(new URL("../lammps/client.js", document.baseURI));
-  ```
-
-  `document.baseURI` resolves against the JupyterLab page (`/notebook/lab/…`), so
-  `../lammps/client.js` lands on `/notebook/lammps/client.js` in both the Lab and
-  Notebook interfaces. `client.js` then lazy-imports the wasm module relative to
-  itself, so the single copied folder is self-contained.
-- The JS kernel runs code in a hidden same-origin iframe (there is also a Web
-  Worker variant). The iframe kernel is the default for our notebooks: it has DOM
-  access (needed for `requestAnimationFrame` throttling, rich HTML output, and
-  future three.js visualization) and dynamic `import()` works there.
+  deployed site; the Python bindings dynamic-import
+  `{site}/lammps/client.js` inside the Pyodide worker (the site root is
+  derived from the kernel's own URL). `client.js` lazy-imports the wasm module
+  relative to itself, so the single copied folder is self-contained.
+- **The `lammps-js` Python bindings** (repo-root `python/`, built into a wheel
+  under `pypi/` that piplite indexes — notebooks run `%pip install lammps-js`;
+  the module imports as `lammps`). They mirror the official LAMMPS Python
+  module (https://docs.lammps.org/Python_module.html): `command`,
+  `commands_string`, `file`, `get_natoms`, `get_thermo`,
+  `extract_atom/compute/fix/variable`, `extract_box`, `version`, `close` —
+  with `lmp = await lammps(...)` as the one creation-time difference (wasm
+  loads async), numpy arrays instead of ctypes pointers, and native-style
+  KOKKOS `cmdargs` (`-k on t 4 -sf kk`) selecting the multithreaded build.
+  Per-atom and vector data flow through the modifier registry
+  (`syncModifier`, `getModifierPerAtom`) into numpy copies.
+- The JavaScript kernel was removed when the Python notebooks replaced the JS
+  ones (git history has them); JS usage is covered by the playground and
+  `/docs/` instead.
 - Deployment: the Pages workflow builds the JupyterLite site into
   `examples/pages/dist/notebook/` after the vite build, so it ships inside the same
   Pages artifact → `editor.lammps.org/notebook/`.
@@ -51,21 +54,23 @@ the kernel is the browser.
   `GRANULAR` do not. Tutorials that need them are marked below; shipping the
   atomify-flavor wasm (`PACKAGES=atomify`) to the notebook site later unlocks
   nearly all of them.
-- **Potential/data files** are not bundled in the wasm FS. Notebooks `fetch()`
-  them (from `content/` files served by the site, or from lammps.js GitHub raw
-  URLs) and write them with `lammps.writeFile(...)` before running.
-- **Asyncify rule** (main-thread runs): inside `runScriptAsync` step callbacks,
-  make all `lammps.*` calls **before** the first `await` — the wasm cannot be
-  re-entered while suspended. Tutorials must model this correctly.
-- **No SharedArrayBuffer**: JupyterLite registers its own service worker, so we
-  don't install `coi-serviceworker` under `/notebook/`. The KOKKOS multithreaded
-  build therefore stays a playground-only feature for now (a COOP/COEP-enabled
-  host would lift this).
-- **Plotting**: there is no matplotlib. Options, in order of preference:
-  a tiny bundled `plot.js` helper (SVG line/scatter charts, no dependencies,
-  imported the same way as the client), Plotly/Chart.js from a CDN, or
-  `console.table`-style text output. The docs page already has a minimal chart
-  renderer (`examples/pages/src/docs/chart.ts`) that can be extracted for this.
+- **Potential/data files** are not bundled in the wasm FS. Notebooks fetch
+  them (`pyfetch(lammps.site_url("files/data/…"))`, or any URL) and hand them
+  to `lmp.file(path, contents=…)` / `lmp.write_file(...)` before running.
+- **Asyncify rule** (JS client, main-thread runs): inside `runScriptAsync`
+  step callbacks, make all `lammps.*` calls **before** the first `await` — the
+  wasm cannot be re-entered while suspended. The Python notebooks sidestep
+  this by running in chunks (`run 25` in a loop) from the worker.
+- **No SharedArrayBuffer on GitHub Pages**: JupyterLite registers its own
+  service worker, so we don't install `coi-serviceworker` under `/notebook/`.
+  On the deployed site the KOKKOS multithreaded build is therefore unavailable
+  and the KOKKOS tutorial (`basics/04`) falls back to the single-threaded build
+  with an explanation. On a COOP/COEP-enabled host the same site is fully
+  multithreaded — the Pyodide kernel, piplite and CDN downloads all work under
+  `require-corp` (verified headlessly).
+- **Plotting**: `%pip install matplotlib` just works in the Pyodide kernel
+  (rendered inline as rich output) — this was the main reason to go
+  Python-first.
 
 ## Content folder layout
 
@@ -75,8 +80,8 @@ examples/notebook/content/
 ├── basics/
 │   ├── 01-getting-started.ipynb
 │   ├── 02-scripts-and-files.ipynb
-│   ├── 03-live-data.ipynb
-│   └── 04-snapshots-and-analysis.ipynb
+│   ├── 03-analysis-and-plotting.ipynb
+│   └── 04-multithreading-kokkos.ipynb
 ├── md-basics/                      # molecular dynamics concepts (LJ systems)
 ├── materials/                      # matsci-tutorials.pdf ports (needs MANYBODY)
 ├── soft-matter/                    # LiveCoMS soft-matter ports (needs KSPACE/MOLECULE)
@@ -90,11 +95,11 @@ examples/notebook/content/
 
 | Notebook | Contents |
 |---|---|
-| `index.ipynb` | What this site is, how the kernel works, load `LammpsClient`, melt a small LJ crystal, where to go next. |
-| `01-getting-started` | `create()` options (`print`/`printErr`), `start()`, `runScript` vs `runCommand` vs `runInput`, reading `syncParticles().count`, `dispose()`. |
-| `02-scripts-and-files` | The in-memory FS: `writeFile`/`removeFile`, `module.FS.readFile`, writing dumps and reading them back, fetching a data file from the web into the FS. |
-| `03-live-data` | `runScriptAsync` + step callbacks, `computeScalars`, throttling with `requestAnimationFrame`, stopping a run by throwing; the asyncify do-not-re-enter rule. |
-| `04-snapshots-and-analysis` | Typed-array access: positions/ids/types, wrapped vs unwrapped, box matrix; compute MSD/temperature in JavaScript from the arrays. |
+| `index.ipynb` | What this site is, `%pip install lammps-js`, melt a small LJ crystal, where to go next. |
+| `01-getting-started` | The official-module API: `await lammps()`, `commands_string`/`command`, `get_thermo`, `extract_global`/`extract_box`, `extract_atom` as numpy, atom-style variables, `close()`. |
+| `02-scripts-and-files` | The in-memory FS: `lmp.file(path, contents=…)`, dumps back out with `read_file` + numpy parsing, `write_file`, fetching a script over HTTP with `site_url`. |
+| `03-analysis-and-plotting` | numpy + matplotlib on a live run: thermo series in chunks, MSD → diffusion coefficient, RDF via `extract_compute(ARRAY)`, per-atom KE histogram. |
+| `04-multithreading-kokkos` | The KOKKOS wasm build via native-style `cmdargs`, cross-origin-isolation check + fallback, benchmark. |
 
 ### Series 1 — MD fundamentals with LJ systems (default wasm ✓)
 
@@ -102,7 +107,7 @@ examples/notebook/content/
 2. **Radial distribution function** — `compute rdf`, plot g(r) for solid vs liquid.
 3. **Diffusion & mean-squared displacement** — Einstein relation, extract D from MSD slope (atomify has a `diffusion` example to port).
 4. **Thermostats** — NVE vs NVT (Nosé–Hoover) vs Langevin; temperature ramping (`fix nvt` with start/stop temps).
-5. **Equation of state** — pressure vs density scan of the LJ fluid; LAMMPS loops (`variable`/`next`/`jump`) driven from JS instead.
+5. **Equation of state** — pressure vs density scan of the LJ fluid; LAMMPS loops (`variable`/`next`/`jump`) driven from Python instead.
 6. **2D systems** — cheap, fast, and pretty: 2D LJ crystallization.
 7. **Walls & confinement** — `fix wall/lj93`, particles in a box/channel (atomify `walls` example).
 8. **Surface diffusion** — adatom hopping on a crystal surface (atomify `surfacediffusion`).
@@ -123,11 +128,11 @@ examples/notebook/content/
 
 The LiveCoMS "Materials-Science Tutorials for LAMMPS" (Gravelle, Tschopp,
 Kohlmeyer) map almost 1:1 onto notebooks — each tutorial is narrative + input +
-post-processing, and the post-processing (currently Python) becomes JavaScript
-on the live arrays instead:
+post-processing, and the Python post-processing runs as-is on the live numpy
+arrays:
 
 1. **Crystalline metals & the EAM potential** — build fcc Al, fetch `Al_zhou.eam.alloy`, minimize, cohesive energy & lattice constant vs experiment.
-2. **Energy–volume curve** — scan the lattice parameter, fit Birch–Murnaghan *in the notebook* (a few lines of JS least-squares), report a₀ and bulk modulus.
+2. **Energy–volume curve** — scan the lattice parameter, fit Birch–Murnaghan *in the notebook* (numpy least-squares), report a₀ and bulk modulus.
 3. **Uniaxial deformation** — strain a single crystal in tension/compression, live stress–strain plot while it runs (this is where in-browser shines).
 4. **Grain boundaries** — Σ5(310) tilt boundary, GB energy computation.
 5. **Bicrystal fracture** — strain to failure, per-atom stress coloring.
