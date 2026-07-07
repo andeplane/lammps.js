@@ -55,6 +55,19 @@ jobs:
           npm ci
           npm run build
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The JupyterLite notebook site ships inside the same Pages artifact,
+      # at /notebook/. build.sh also copies the built lammps.js dist into
+      # the site (the notebooks import it from {site}/lammps/client.js).
+      - name: Build notebook site (JupyterLite)
+        run: |
+          python -m pip install -r examples/notebook/requirements.txt
+          bash examples/notebook/build.sh "$GITHUB_WORKSPACE/examples/pages/dist/notebook"
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

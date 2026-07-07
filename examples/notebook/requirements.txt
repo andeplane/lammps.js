@@ -1,0 +1,9 @@
+# JupyterLite site with the JavaScript kernel.
+# The kernel is pinned to a 0.4.0 pre-release on purpose: it is the first
+# version whose kernels support `await` and dynamic `import()` in cells
+# (the 0.3.0 kernel does a bare eval in a web worker, where neither works),
+# which the lammps.js notebooks depend on.
+jupyterlite-core==0.8.0
+jupyterlite-javascript-kernel==0.4.0a4
+# Needed by `jupyter lite build --contents` to index the content directory.
+jupyter-server~=2.19

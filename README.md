@@ -7,6 +7,7 @@ LAMMPS in the browser. WebAssembly build + a small TS-friendly client.
 
 **[Interactive docs →](https://editor.lammps.org/docs/)** — every API with live, editable examples
 &nbsp;·&nbsp; **[Playground →](https://editor.lammps.org/)**
+&nbsp;·&nbsp; **[Notebooks →](https://editor.lammps.org/notebook/)** — Jupyter tutorials running LAMMPS in your browser
 
 ## Install
 
@@ -290,6 +291,16 @@ npm test                # serial build + full suite
 npm run test:kokkos     # KOKKOS build + KOKKOS suite
 npm run test:atomify    # atomify build + atomify suite
 ```
+
+## Notebooks (JupyterLite)
+
+[editor.lammps.org/notebook](https://editor.lammps.org/notebook/) hosts Jupyter
+notebook tutorials that run LAMMPS entirely in the browser — a
+[JupyterLite](https://jupyterlite.readthedocs.io/) site with a JavaScript
+kernel, where cells drive `LammpsClient` directly. The site source lives in
+`examples/notebook/` (`content/` holds the notebooks) and deploys with the
+Pages workflow. See [NOTEBOOK_TUTORIALS.md](NOTEBOOK_TUTORIALS.md) for the
+tutorial roadmap and `examples/notebook/README.md` for building it locally.
 
 ## Agent skill
 
