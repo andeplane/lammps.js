@@ -64,6 +64,18 @@ describe.skipIf(!hasAtomifyBuild)("atomify wasm build (KOKKOS + full package set
     }
   });
 
+  it("throws a readable JS Error on a LAMMPS error (MEMORY64 error glue)", async () => {
+    // Regression guard for the MEMORY64 pointer bug in lammpsweb_throw_error:
+    // this build passes the C-string pointer to EM_JS as a BigInt, so an
+    // unguarded UTF8ToString(message) aborted the module instead of throwing.
+    // With the Number() coercion the LAMMPS message must surface cleanly.
+    const lmp = await createInstance(2);
+    expect(() => lmp.runCommand("pair_style does_not_exist")).toThrowError(
+      /pair style/i,
+    );
+    expect(lmp.getLastErrorMessage()).toMatch(/pair style/i);
+  });
+
   it("runs a plain LJ script multithreaded via the kk suffix", async () => {
     const lmp = await createInstance(2);
     lmp.runScript(`

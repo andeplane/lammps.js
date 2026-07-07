@@ -24,8 +24,12 @@
 
 // Throws a real JS Error (propagates through the wasm frames to the embind
 // caller; under ASYNCIFY a suspended call's promise rejects with it).
+// Under MEMORY64 (the atomify/kokkos build) a `const char *` reaches EM_JS as
+// a BigInt; UTF8ToString expects a Number offset, so coerce it. Number() is a
+// no-op for the wasm32 build's Number pointers, and lossless here since
+// MEMORY64=2 keeps addresses within the 32-bit range.
 EM_JS(void, lammpsweb_throw_error, (const char *message), {
-  throw new Error(UTF8ToString(message));
+  throw new Error(UTF8ToString(Number(message)));
 });
 
 namespace {
