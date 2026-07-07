@@ -33,6 +33,15 @@ Differences from the native module, by necessity or convenience:
 - LAMMPS runs in an in-memory filesystem. `lmp.file(path)` transparently
   copies `path` from the notebook's filesystem into the wasm filesystem when
   it exists locally, and also accepts the file body via `contents=`.
+
+Filesystem: in JupyterLite, the wasm module's ``/work`` directory is
+mounted with the same **DriveFS** that Pyodide uses for ``/drive`` — LAMMPS
+reads and writes go directly through the JupyterLite service worker to the
+notebook filesystem, so dump files, logs, etc. appear in the Jupyter file
+browser instantly and local files are visible to LAMMPS without any copying.
+The wasm module is also **shared** across all ``lammps()`` calls in the same
+kernel session, so each ``await lammps()`` reuses the same engine (and the
+wasm download only happens once).
 """
 
 from __future__ import annotations
@@ -83,6 +92,180 @@ _MONTHS = {
 }
 
 _client_modules: dict[str, object] = {}
+_wasm_modules: dict[str, object] = {}
+_drivefs_mounted: set[int] = set()
+
+_MOUNT_DRIVEFS_JS = """
+(lammpsModule, pyodideFS) => {
+  // Grab the existing DriveFS that the Pyodide kernel mounted on /drive.
+  const driveMount = pyodideFS.lookupPath("/drive", { follow: false }).node.mount;
+  const pyDriveFS = driveMount.type;   // The DriveFS instance
+  const pyAPI     = pyDriveFS.API;     // Its ContentsAPI (does XHR to service worker)
+
+  // Build a lightweight filesystem backend for the LAMMPS module that
+  // delegates every operation to the *same* ContentsAPI. This gives LAMMPS
+  // direct read/write access to the notebook filesystem with zero sync.
+  const FS   = lammpsModule.FS;
+  // PATH and ERRNO_CODES may not be exported by the LAMMPS wasm module,
+  // so we provide minimal inline implementations.
+  const join2 = (a, b) => {
+    if (!a || a === "/") return "/" + b;
+    return a.replace(/\\/+$/, "") + "/" + b;
+  };
+  const EC = lammpsModule.ERRNO_CODES || { ENOENT: 44, EINVAL: 28, EPERM: 63 };
+  const DIR_MODE  = 16895;   // 040777
+  const SEEK_CUR  = 1;
+  const SEEK_END  = 2;
+
+  const mountpoint = "/work";
+
+  // Rewrite paths: the API expects paths relative to the Pyodide /drive
+  // mount, but our mountpoint is /work on a different FS.
+  const toAPIPath = (p) => {
+    if (p.startsWith(mountpoint)) p = p.slice(mountpoint.length);
+    if (!p.startsWith("/")) p = "/" + p;
+    return p;
+  };
+
+  const realPath = (node) => {
+    const parts = [];
+    let n = node;
+    parts.push(n.name);
+    while (n.parent !== n) { n = n.parent; parts.push(n.name); }
+    parts.reverse();
+    return parts.join("/").replace(/\\/\\/+/g, "/");
+  };
+
+  const flagNeedsWrite = {
+    0:false, 1:true, 2:true, 64:true, 65:true, 66:true, 129:true, 193:true,
+    514:true, 577:true, 578:true, 705:true, 706:true, 1024:true, 1025:true,
+    1026:true, 1089:true, 1090:true, 1153:true, 1154:true, 1217:true, 1218:true,
+    4096:true, 4098:true,
+  };
+
+  const proxyFS = {
+    mount(mount) {
+      return this.createNode(null, mount.mountpoint, DIR_MODE, 0);
+    },
+    createNode(parent, name, mode, dev) {
+      const node = FS.createNode(parent, name, mode, dev);
+      node.node_ops = proxyFS.node_ops;
+      node.stream_ops = proxyFS.stream_ops;
+      return node;
+    },
+    node_ops: {
+      getattr(nodeOrStream) {
+        const node = nodeOrStream.node ?? nodeOrStream;
+        const stats = pyAPI.getattr(toAPIPath(realPath(node)));
+        stats.mode = node.mode;
+        stats.ino = node.id;
+        return stats;
+      },
+      setattr(nodeOrStream, attr) {
+        const node = nodeOrStream.node ?? nodeOrStream;
+        if (attr.mode !== undefined) node.mode = attr.mode;
+        if (attr.timestamp !== undefined) node.timestamp = attr.timestamp;
+      },
+      lookup(parentOrStream, name) {
+        const parent = parentOrStream.node ?? parentOrStream;
+        const path = toAPIPath(join2(realPath(parent), name));
+        const result = pyAPI.lookup(path);
+        if (!result.ok) throw new FS.ErrnoError(EC["ENOENT"]);
+        return proxyFS.createNode(parent, name, result.mode, 0);
+      },
+      mknod(parentOrStream, name, mode, dev) {
+        const parent = parentOrStream.node ?? parentOrStream;
+        const path = toAPIPath(join2(realPath(parent), name));
+        pyAPI.mknod(path, mode);
+        return proxyFS.createNode(parent, name, mode, dev);
+      },
+      rename(nodeOrStream, newDirOrStream, newName) {
+        const node = nodeOrStream.node ?? nodeOrStream;
+        const newDir = newDirOrStream.node ?? newDirOrStream;
+        const oldPath = node.parent
+          ? toAPIPath(join2(realPath(node.parent), node.name))
+          : toAPIPath(node.name);
+        pyAPI.rename(oldPath, toAPIPath(join2(realPath(newDir), newName)));
+        node.name = newName;
+        node.parent = newDir;
+      },
+      unlink(parentOrStream, name) {
+        const parent = parentOrStream.node ?? parentOrStream;
+        return pyAPI.rmdir(toAPIPath(join2(realPath(parent), name)));
+      },
+      rmdir(parentOrStream, name) {
+        const parent = parentOrStream.node ?? parentOrStream;
+        return pyAPI.rmdir(toAPIPath(join2(realPath(parent), name)));
+      },
+      readdir(nodeOrStream) {
+        const node = nodeOrStream.node ?? nodeOrStream;
+        return pyAPI.readdir(toAPIPath(realPath(node)));
+      },
+      symlink() { throw new FS.ErrnoError(EC["EPERM"]); },
+      readlink() { throw new FS.ErrnoError(EC["EINVAL"]); },
+    },
+    stream_ops: {
+      open(stream) {
+        if (FS.isFile(stream.node.mode)) {
+          try {
+            stream.file = pyAPI.get(toAPIPath(realPath(stream.node)));
+          } catch {
+            const flags = stream.flags ?? stream.shared?.flags ?? 0;
+            const pf = (typeof flags === "string" ? parseInt(flags,10) : flags) & 0x1fff;
+            if (flagNeedsWrite[pf]) {
+              stream.node = proxyFS.node_ops.mknod(
+                stream.node.parent, stream.node.name, stream.node.mode, 0);
+              stream.file = pyAPI.get(toAPIPath(realPath(stream.node)));
+            } else {
+              throw new FS.ErrnoError(EC["ENOENT"]);
+            }
+          }
+        }
+      },
+      close(stream) {
+        if (!FS.isFile(stream.node.mode) || !stream.file) return;
+        const flags = stream.flags ?? stream.shared?.flags ?? 0;
+        const pf = (typeof flags === "string" ? parseInt(flags,10) : flags) & 0x1fff;
+        if (flagNeedsWrite[pf] !== false) {
+          pyAPI.put(toAPIPath(realPath(stream.node)), stream.file);
+        }
+        stream.file = undefined;
+      },
+      read(stream, buffer, offset, length, position) {
+        if (length <= 0 || !stream.file || position >= (stream.file.data?.length || 0))
+          return 0;
+        const size = Math.min(stream.file.data.length - position, length);
+        buffer.set(stream.file.data.subarray(position, position + size), offset);
+        return size;
+      },
+      write(stream, buffer, offset, length, position) {
+        if (length <= 0 || !stream.file) return 0;
+        if (position + length > (stream.file.data?.length || 0)) {
+          const old = stream.file.data || new Uint8Array();
+          stream.file.data = new Uint8Array(position + length);
+          stream.file.data.set(old);
+        }
+        stream.file.data.set(buffer.subarray(offset, offset + length), position);
+        return length;
+      },
+      llseek(stream, offset, whence) {
+        let pos = offset;
+        if (whence === SEEK_CUR) pos += stream.position ?? stream.shared?.position ?? 0;
+        else if (whence === SEEK_END && FS.isFile(stream.node.mode) && stream.file)
+          pos += stream.file.data.length;
+        if (pos < 0) throw new FS.ErrnoError(EC["EINVAL"]);
+        return pos;
+      },
+    },
+  };
+
+  try { FS.unmount(mountpoint); } catch {}
+  try { FS.mkdirTree(mountpoint); } catch {}
+  FS.mount(proxyFS, {}, mountpoint);
+  FS.chdir(mountpoint);
+  return true;
+}
+"""
 
 
 class LammpsError(RuntimeError):
@@ -248,15 +431,31 @@ class lammps:  # noqa: N801 - mirrors the official class name
         printerr_proxy = create_proxy(self._on_stderr)
         self._proxies += [print_proxy, printerr_proxy]
 
-        module_opts = to_js(
-            {"print": print_proxy, "printErr": printerr_proxy},
-            dict_converter=js.Object.fromEntries,
-        )
-        client_opts = to_js(
-            {"kokkos": self._kokkos if self._kokkos is not None else False},
-            dict_converter=js.Object.fromEntries,
-        )
-        self._client = await mod.LammpsClient.create(module_opts, client_opts)
+        # Reuse the wasm module across lammps() calls — this shares the
+        # in-memory filesystem so files written by one session are visible
+        # to the next without manual copying.
+        cache_key = f"{url}|{'kk' if self._kokkos is not None else 'serial'}"
+        wasm_module = _wasm_modules.get(cache_key)
+        if wasm_module is None:
+            module_opts = to_js(
+                {"print": print_proxy, "printErr": printerr_proxy},
+                dict_converter=js.Object.fromEntries,
+            )
+            client_opts = to_js(
+                {"kokkos": self._kokkos if self._kokkos is not None else False},
+                dict_converter=js.Object.fromEntries,
+            )
+            self._client = await mod.LammpsClient.create(module_opts, client_opts)
+            _wasm_modules[cache_key] = self._client.module
+        else:
+            wasm_module.print = print_proxy
+            wasm_module.printErr = printerr_proxy
+            instance = wasm_module.LAMMPSWeb.new()
+            self._client = mod.LammpsClient.new(wasm_module, instance)
+
+        # Mount JupyterLite's DriveFS on /work so LAMMPS reads/writes go
+        # directly to the notebook filesystem — no syncing needed.
+        await self._mount_drivefs()
 
         try:
             if self._cmdargs:
@@ -380,6 +579,32 @@ class lammps:  # noqa: N801 - mirrors the official class name
             return current
         return np.column_stack([v for v in values])
 
+    # -- DriveFS mount -----------------------------------------------------
+
+    async def _mount_drivefs(self):
+        """Mount JupyterLite's DriveFS on the LAMMPS module's /work.
+
+        After this, every LAMMPS ``fopen``/``fwrite``/``fclose`` in ``/work``
+        goes directly through JupyterLite's service-worker contents API to the
+        notebook filesystem — files appear in the file browser instantly (and
+        vice versa), with no polling or sync step.
+
+        Falls back silently if the DriveFS import or the Pyodide /drive mount
+        is unavailable (e.g. running outside JupyterLite).
+        """
+        cache_key = id(self._client.module)
+        if cache_key in _drivefs_mounted:
+            return
+        run_js = self._ffi[1]
+        try:
+            import pyodide_js
+
+            mount_fn = run_js(_MOUNT_DRIVEFS_JS)
+            mount_fn(self._client.module, pyodide_js.FS)
+            _drivefs_mounted.add(cache_key)
+        except Exception:
+            pass
+
     # -- official API: commands -------------------------------------------
 
     def command(self, cmd: str):
@@ -404,10 +629,6 @@ class lammps:  # noqa: N801 - mirrors the official class name
         the wasm filesystem first. Otherwise, if ``path`` exists in the
         notebook's local filesystem it is copied in transparently.
         """
-        if contents is None:
-            local = Path(path)
-            if local.exists():
-                contents = local.read_bytes()
         if contents is not None:
             self.write_file(path, contents)
         self._call("runFile", str(path))
