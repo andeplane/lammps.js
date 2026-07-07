@@ -82,6 +82,13 @@ examples/notebook/content/
 │   ├── 02-scripts-and-files.ipynb
 │   ├── 03-analysis-and-plotting.ipynb
 │   └── 04-multithreading-kokkos.ipynb
+├── materials/                      # SHIPPED: matsci-tutorials arc on an LJ metal
+│   ├── 01-perfect-crystal.ipynb
+│   ├── 02-energy-volume-curve.ipynb
+│   ├── 03-uniaxial-deformation.ipynb
+│   ├── 04-grain-boundary.ipynb
+│   ├── 05-fracture.ipynb
+│   └── 06-nanoindentation.ipynb
 ├── md-basics/                      # molecular dynamics concepts (LJ systems)
 ├── materials/                      # matsci-tutorials.pdf ports (needs MANYBODY)
 ├── soft-matter/                    # LiveCoMS soft-matter ports (needs KSPACE/MOLECULE)
@@ -124,12 +131,18 @@ examples/notebook/content/
 7. **Retuning a run in flight** — change fix parameters from the callback (`async-retune` docs snippet as a notebook).
 8. **Performance** — timing runs, system-size scaling, what wasm costs vs native.
 
-### Series 3 — Materials science (ports of `matsci-tutorials.pdf`, needs MANYBODY)
+### Series 3 — Materials science (SHIPPED as `materials/`, adapted to LJ)
 
 The LiveCoMS "Materials-Science Tutorials for LAMMPS" (Gravelle, Tschopp,
-Kohlmeyer) map almost 1:1 onto notebooks — each tutorial is narrative + input +
-post-processing, and the Python post-processing runs as-is on the live numpy
-arrays:
+Kohlmeyer) are shipped as the `materials/` series, **adapted from EAM aluminum
+to a model LJ fcc metal** (the default wasm has no MANYBODY): same arc — perfect
+crystal → E–V curve/Birch–Murnaghan → uniaxial deformation → Σ5(310) grain
+boundary → GB fracture → nanoindentation — same LAMMPS techniques
+(`fix box/relax`, `fix deform` + npt, `delete_atoms overlap`, grips via
+`fix setforce` + quasi-static minimize, `fix indent`, `compute centro/atom`
+visualized as matplotlib scatter plots). Once a serial full-package wasm ships
+here, re-porting to real EAM aluminum is a units + pair_style swap. Original
+per-tutorial notes:
 
 1. **Crystalline metals & the EAM potential** — build fcc Al, fetch `Al_zhou.eam.alloy`, minimize, cohesive energy & lattice constant vs experiment.
 2. **Energy–volume curve** — scan the lattice parameter, fit Birch–Murnaghan *in the notebook* (numpy least-squares), report a₀ and bulk modulus.
