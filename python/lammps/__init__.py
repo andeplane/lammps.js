@@ -175,6 +175,19 @@ _MOUNT_DRIVEFS_JS = """
         const node = nodeOrStream.node ?? nodeOrStream;
         if (attr.mode !== undefined) node.mode = attr.mode;
         if (attr.timestamp !== undefined) node.timestamp = attr.timestamp;
+        if (attr.size !== undefined && FS.isFile(node.mode)) {
+          // Truncation (e.g. fopen "w" on an existing file) arrives here as
+          // a node-level size change, before any stream is opened.
+          const path = toAPIPath(realPath(node));
+          let data = new Uint8Array(attr.size);
+          if (attr.size > 0) {
+            try {
+              const old = pyAPI.get(path).data || new Uint8Array(0);
+              data.set(old.subarray(0, Math.min(old.length, attr.size)));
+            } catch {}
+          }
+          pyAPI.put(path, { data });
+        }
       },
       lookup(parentOrStream, name) {
         const parent = parentOrStream.node ?? parentOrStream;
