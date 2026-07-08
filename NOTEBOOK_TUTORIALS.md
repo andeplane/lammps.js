@@ -81,7 +81,8 @@ examples/notebook/content/
 │   ├── 01-getting-started.ipynb
 │   ├── 02-scripts-and-files.ipynb
 │   ├── 03-analysis-and-plotting.ipynb
-│   └── 04-multithreading-kokkos.ipynb
+│   ├── 04-multithreading-kokkos.ipynb
+│   └── 05-thermo-output-to-file.ipynb
 ├── materials/                      # SHIPPED: matsci-tutorials arc on an LJ metal
 │   ├── 01-perfect-crystal.ipynb
 │   ├── 02-energy-volume-curve.ipynb
@@ -107,6 +108,7 @@ examples/notebook/content/
 | `02-scripts-and-files` | The in-memory FS: `lmp.file(path, contents=…)`, dumps back out with `read_file` + numpy parsing, `write_file`, fetching a script over HTTP with `site_url`. |
 | `03-analysis-and-plotting` | numpy + matplotlib on a live run: thermo series in chunks, MSD → diffusion coefficient, RDF via `extract_compute(ARRAY)`, per-atom KE histogram. |
 | `04-multithreading-kokkos` | The KOKKOS wasm build via native-style `cmdargs`, cross-origin-isolation check + fallback, benchmark. |
+| `05-thermo-output-to-file` | The classic file-based workflow: `fix ave/time` writes time/temperature/energy to `thermo.txt` during the run, a separate cell reads the file with `numpy.loadtxt` and plots it. |
 
 ### Series 1 — MD fundamentals with LJ systems (default wasm ✓)
 

@@ -38,7 +38,9 @@ Filesystem: in JupyterLite, the wasm module's ``/work`` directory is
 mounted with the same **DriveFS** that Pyodide uses for ``/drive`` — LAMMPS
 reads and writes go directly through the JupyterLite service worker to the
 notebook filesystem, so dump files, logs, etc. appear in the Jupyter file
-browser instantly and local files are visible to LAMMPS without any copying.
+browser instantly — in the running notebook's own directory, where native
+LAMMPS would put them — and local files are visible to LAMMPS without any
+copying.
 The wasm module is also **shared** across all ``lammps()`` calls in the same
 kernel session, so each ``await lammps()`` reuses the same engine (and the
 wasm download only happens once).
@@ -120,11 +122,19 @@ _MOUNT_DRIVEFS_JS = """
   const mountpoint = "/work";
 
   // Rewrite paths: the API expects paths relative to the Pyodide /drive
-  // mount, but our mountpoint is /work on a different FS.
+  // mount, but our mountpoint is /work on a different FS. Map /work to the
+  // kernel's *current directory* inside /drive (not the drive root), so
+  // LAMMPS files land next to the running notebook — the same place native
+  // LAMMPS would put them (the process cwd).
   const toAPIPath = (p) => {
     if (p.startsWith(mountpoint)) p = p.slice(mountpoint.length);
     if (!p.startsWith("/")) p = "/" + p;
-    return p;
+    let prefix = "";
+    try {
+      const cwd = pyodideFS.cwd();
+      if (cwd.startsWith("/drive/")) prefix = cwd.slice("/drive".length);
+    } catch {}
+    return prefix + p;
   };
 
   const realPath = (node) => {
