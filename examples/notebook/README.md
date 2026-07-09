@@ -36,15 +36,22 @@ In CI, `.github/workflows/pages.yml` does the same and places the output at
 The Python bindings accept native-style KOKKOS arguments
 (`await lammps(cmdargs=["-k", "on", "t", "4", "-sf", "kk"])`), which load the
 multithreaded `lammps-kokkos.js` build. Threads need `SharedArrayBuffer`, so
-the page must be cross-origin isolated: serve the site with
+the page must be cross-origin isolated (the COOP/COEP headers).
 
-```
-Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
-```
+Static hosting like GitHub Pages cannot send those headers, so `build.sh`
+runs `coi_patch.py` after `jupyter lite build`: it folds the
+[coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker) trick into
+JupyterLite's **own** service worker (only one worker can own the scope, and
+the contents API — which our DriveFS mount rides on — needs it to be
+JupyterLite's). The worker re-serves every response with the headers added,
+and a small bootstrap in the app pages reloads once, the first time the
+worker takes control. The result: the site is cross-origin isolated even on
+GitHub Pages or a bare `python3 -m http.server`, and the KOKKOS build runs
+truly multithreaded (~2.4× over serial at `t 4`, verified headlessly — the
+Pyodide kernel, piplite and CDN downloads all work under `require-corp`).
+If isolation is unavailable (e.g. the reload guard trips), notebooks fall
+back to the single-threaded build gracefully.
 
-GitHub Pages cannot send these headers and the JupyterLite service worker
-occupies the site scope (so the playground's `coi-serviceworker` trick is not
-available here) — on the deployed site the KOKKOS notebook falls back to the
-single-threaded build. Local serving with the headers above gives real
-multithreading; the Pyodide kernel and CDN downloads work fine under COOP/COEP.
+`coi_patch.py` asserts on the service-worker internals of the pinned
+`jupyterlite-core` — a version bump that changes them fails the build loudly.
+Upstream feature request: jupyterlite/jupyterlite#1409.

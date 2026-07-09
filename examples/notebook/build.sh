@@ -39,3 +39,12 @@ assert redirect not in html
 html = html.replace("<head>", "<head>\n    " + redirect, 1)
 open(path, "w").write(html)
 EOF
+
+# Cross-origin isolation on static hosting (the coi-serviceworker trick,
+# folded into JupyterLite's own service worker — only one SW can own the
+# scope, and the contents API needs it to be JupyterLite's). GitHub Pages
+# cannot send COOP/COEP headers, so the service worker adds them to every
+# response it serves; app pages get a bootstrap that reloads once when the
+# SW takes control, so the *document* is also served with the headers.
+# SharedArrayBuffer then works and the KOKKOS multithreaded wasm loads.
+python3 coi_patch.py "$OUT"

@@ -312,6 +312,10 @@ lmp.command("run 100")
 x = lmp.extract_atom("x")      # numpy (natoms, 3)
 ```
 
+The site is cross-origin isolated even on GitHub Pages (its service worker
+injects the COOP/COEP headers), so the multithreaded KOKKOS build works in
+the notebooks too — see the `basics/04` tutorial.
+
 The site source lives in `examples/notebook/` (`content/` holds the
 notebooks) and deploys with the Pages workflow. See
 [NOTEBOOK_TUTORIALS.md](NOTEBOOK_TUTORIALS.md) for the tutorial roadmap and

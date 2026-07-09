@@ -61,13 +61,18 @@ the kernel is the browser.
   step callbacks, make all `lammps.*` calls **before** the first `await` — the
   wasm cannot be re-entered while suspended. The Python notebooks sidestep
   this by running in chunks (`run 25` in a loop) from the worker.
-- **No SharedArrayBuffer on GitHub Pages**: JupyterLite registers its own
-  service worker, so we don't install `coi-serviceworker` under `/notebook/`.
-  On the deployed site the KOKKOS multithreaded build is therefore unavailable
-  and the KOKKOS tutorial (`basics/04`) falls back to the single-threaded build
-  with an explanation. On a COOP/COEP-enabled host the same site is fully
-  multithreaded — the Pyodide kernel, piplite and CDN downloads all work under
-  `require-corp` (verified headlessly).
+- **SharedArrayBuffer on GitHub Pages**: static hosting cannot send the
+  COOP/COEP headers, and JupyterLite's own service worker owns the site
+  scope (the contents API and our DriveFS mount need it), so the plain
+  `coi-serviceworker` shim can't be installed under `/notebook/`. Instead,
+  `build.sh` runs `coi_patch.py`, which folds the same header-injection
+  logic into JupyterLite's service worker and adds a one-time reload
+  bootstrap to the app pages. The deployed site is therefore cross-origin
+  isolated and the KOKKOS multithreaded build works (verified headlessly:
+  ~2.4× over serial at `t 4`; the Pyodide kernel, piplite and CDN downloads
+  all work under `require-corp`). Upstream tracking:
+  jupyterlite/jupyterlite#1409 — replace the patch with the supported flag
+  if one lands.
 - **Plotting**: `%pip install matplotlib` just works in the Pyodide kernel
   (rendered inline as rich output) — this was the main reason to go
   Python-first.
