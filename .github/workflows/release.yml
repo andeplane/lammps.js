@@ -59,9 +59,11 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       # OIDC trusted publishing needs npm >= 11.5.1; the npm bundled with
-      # node 20 (10.x) has no OIDC support and fails with ENEEDAUTH.
+      # node 20 (10.x) has no OIDC support and fails with ENEEDAUTH. Pin to
+      # the 11.x line: npm@latest is now 12.x, which requires node >= 22 and
+      # aborts on this node 20 runner (EBADENGINE).
       - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
+        run: npm install -g npm@11
 
       - name: Install deps
         run: npm ci
