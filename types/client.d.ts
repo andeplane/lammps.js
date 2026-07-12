@@ -46,8 +46,34 @@ export interface SyncBoxOptions {
   copy?: boolean;
 }
 
+export interface KokkosOptions {
+  /** Number of Kokkos threads (capped at the built pthread pool size, 8). */
+  threads?: number;
+  /** Apply the kk accelerator suffix to all styles (`-sf kk`). Default true. */
+  suffix?: boolean;
+}
+
+/**
+ * Which wasm build the client loads: "serial" (default, dist/cpp/lammps.js),
+ * "kokkos" (multi-threaded, dist/cpp/lammps-kokkos.js) or "atomify" (full
+ * package set, also multi-threaded KOKKOS, dist/cpp/lammps-atomify.js).
+ */
+export type LammpsVariant = "serial" | "kokkos" | "atomify";
+
 export interface LammpsClientOptions {
   workdir?: string;
+  /**
+   * Use the multi-threaded KOKKOS wasm build. Requires a cross-origin
+   * isolated context in browsers. Shorthand for `variant: "kokkos"`; also
+   * tunes threads/suffix for `variant: "atomify"`.
+   */
+  kokkos?: boolean | KokkosOptions;
+  /**
+   * Select the wasm build explicitly; takes precedence over `kokkos`.
+   * "kokkos" and "atomify" are multi-threaded builds and require a
+   * cross-origin isolated context in browsers (SharedArrayBuffer).
+   */
+  variant?: LammpsVariant;
 }
 
 export declare class LammpsClient {

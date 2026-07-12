@@ -199,6 +199,48 @@ describe("LammpsClient lifecycle and delegation", () => {
     expect(mocks.startWithArgs).toHaveBeenCalledWith(["-k", "on", "t", "4", "-sf", "kk"]);
   });
 
+  it('variant: "kokkos" starts with Kokkos args like kokkos: true', () => {
+    const { moduleMock } = createModuleMock();
+    const { instanceMock, mocks } = createInstanceMock();
+    const client = createClient(moduleMock, instanceMock, { variant: "kokkos" });
+
+    client.start();
+
+    expect(mocks.start).not.toHaveBeenCalled();
+    expect(mocks.startWithArgs).toHaveBeenCalledTimes(1);
+    const args = mocks.startWithArgs.mock.calls[0][0] as string[];
+    expect(args.slice(0, 3)).toEqual(["-k", "on", "t"]);
+    expect(args.slice(4)).toEqual(["-sf", "kk"]);
+  });
+
+  it('variant: "atomify" is a threaded build: starts with Kokkos args, kokkos option tunes them', () => {
+    const { moduleMock } = createModuleMock();
+    const { instanceMock, mocks } = createInstanceMock();
+    const client = createClient(moduleMock, instanceMock, {
+      variant: "atomify",
+      kokkos: { threads: 4 }
+    });
+
+    client.start();
+
+    expect(mocks.start).not.toHaveBeenCalled();
+    expect(mocks.startWithArgs).toHaveBeenCalledWith(["-k", "on", "t", "4", "-sf", "kk"]);
+  });
+
+  it('explicit variant: "serial" wins over kokkos: true (plain start)', () => {
+    const { moduleMock } = createModuleMock();
+    const { instanceMock, mocks } = createInstanceMock();
+    const client = createClient(moduleMock, instanceMock, {
+      variant: "serial",
+      kokkos: true
+    });
+
+    client.start();
+
+    expect(mocks.startWithArgs).not.toHaveBeenCalled();
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+  });
+
   it("clamps kokkos threads to the pthread pool size and honors suffix: false", () => {
     const { moduleMock } = createModuleMock();
     const { instanceMock, mocks } = createInstanceMock();

@@ -49,11 +49,13 @@ the kernel is the browser.
 
 ### Constraints to keep in mind
 
-- **Package set**: the deployed wasm is the default `PACKAGES=MOLECULE` build.
+- **Package set**: by default the kernel loads the `PACKAGES=MOLECULE` build.
   LJ + molecular force fields work; EAM (`MANYBODY`), `KSPACE`, `REAXFF`,
-  `GRANULAR` do not. Tutorials that need them are marked below; shipping the
-  atomify-flavor wasm (`PACKAGES=atomify`) to the notebook site later unlocks
-  nearly all of them.
+  `GRANULAR` do not. The kernel can request the full-package atomify build
+  with `await lammps(variant="atomify")` — it needs the notebook site to
+  serve `dist/cpp/lammps-atomify.js` and, being a multithreaded KOKKOS
+  build, a cross-origin isolated page. Tutorials that need the extra
+  packages are marked below; the atomify variant unlocks nearly all of them.
 - **Potential/data files** are not bundled in the wasm FS. Notebooks fetch
   them (`pyfetch(lammps.site_url("files/data/…"))`, or any URL) and hand them
   to `lmp.file(path, contents=…)` / `lmp.write_file(...)` before running.

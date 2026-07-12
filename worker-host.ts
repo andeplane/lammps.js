@@ -1,5 +1,5 @@
 import { LammpsClient } from "./client.js";
-import type { KokkosOptions } from "./client.js";
+import type { KokkosOptions, LammpsVariant } from "./client.js";
 import { serializeStepData } from "./worker-protocol.js";
 import type {
   LammpsWorkerRequest,
@@ -16,7 +16,7 @@ export interface InstallLammpsWorkerOptions {
   /** Injectable factory, used by tests to supply a mock client. */
   createClient?: (
     moduleOptions: Record<string, unknown>,
-    clientOptions: { workdir?: string; kokkos?: boolean | KokkosOptions }
+    clientOptions: { workdir?: string; kokkos?: boolean | KokkosOptions; variant?: LammpsVariant }
   ) => Promise<LammpsClient>;
 }
 
@@ -35,8 +35,10 @@ class RunAbortedError extends Error {
 export function installLammpsWorker(scope: WorkerScope, options: InstallLammpsWorkerOptions = {}): void {
   const createClient =
     options.createClient ??
-    ((moduleOptions: Record<string, unknown>, clientOptions: { workdir?: string; kokkos?: boolean | KokkosOptions }) =>
-      LammpsClient.create(moduleOptions, clientOptions));
+    ((
+      moduleOptions: Record<string, unknown>,
+      clientOptions: { workdir?: string; kokkos?: boolean | KokkosOptions; variant?: LammpsVariant }
+    ) => LammpsClient.create(moduleOptions, clientOptions));
 
   let client: LammpsClient | null = null;
   let abortRequested = false;
@@ -127,7 +129,7 @@ export function installLammpsWorker(scope: WorkerScope, options: InstallLammpsWo
               print: (text: unknown) => post({ type: "output", stream: "stdout", text: String(text) }),
               printErr: (text: unknown) => post({ type: "output", stream: "stderr", text: String(text) })
             },
-            { workdir: request.workdir, kokkos: request.kokkos }
+            { workdir: request.workdir, kokkos: request.kokkos, variant: request.variant }
           );
           client.start();
           respond(request.id);

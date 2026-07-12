@@ -35,6 +35,13 @@ cross-origin isolated page:
 lmp = await lammps(cmdargs=["-k", "on", "t", "4", "-sf", "kk"])
 ```
 
+The full-package Atomify build (MANYBODY, KSPACE, REAXFF, GRANULAR, … — also
+a multithreaded KOKKOS build, so it needs a cross-origin isolated page too):
+
+```python
+lmp = await lammps(variant="atomify")
+```
+
 Differences from the native module are listed in the module docstring
 (`import lammps; help(lammps)`).
 

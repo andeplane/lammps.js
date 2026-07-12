@@ -7,12 +7,13 @@
 // moltemplate pair styles). Runs under a plain node environment because
 // emscripten pthreads are backed by worker_threads + SharedArrayBuffer, which
 // jsdom does not provide. It ships in this same package under the
-// ./wasm-atomify export, loaded directly here (LammpsClient's kokkos option
-// targets the separate lammps-kokkos.js).
+// ./wasm-atomify export, loaded both directly and through LammpsClient's
+// `variant: "atomify"` option.
 import { afterAll, describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { LammpsClient } from "../dist/client.js";
 import type { LAMMPSWeb, LammpsModule } from "../types";
 
 const atomifyModulePath = join(process.cwd(), "dist", "cpp", "lammps-atomify.js");
@@ -115,6 +116,22 @@ mass 2 12.011
 pair_style vashishta
 `)
     ).not.toThrow();
+  });
+
+  it('is selected by LammpsClient\'s variant: "atomify" option (Kokkos start args)', async () => {
+    const client = await LammpsClient.create(
+      { print: () => undefined, printErr: () => undefined },
+      { variant: "atomify", kokkos: { threads: 2 } }
+    );
+    instances.push(client.instance);
+    client.start();
+
+    // The client resolved the atomify module (full package set) and started
+    // LAMMPS with the Kokkos runtime enabled (kk suffix on by default).
+    expect(client.instance.hasPackage("KOKKOS")).toBe(true);
+    expect(client.instance.hasPackage("MANYBODY")).toBe(true);
+    client.runScript(readFileSync(join(process.cwd(), "tests", "fixtures", "lj.mini.in"), "utf8"));
+    expect(client.getCurrentStep()).toBe(5);
   });
 
   it("accepts the vendored moltemplate pair style", async () => {

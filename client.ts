@@ -61,6 +61,15 @@ export interface KokkosOptions {
   suffix?: boolean;
 }
 
+/**
+ * Which wasm build the client loads:
+ * - "serial" (default): the single-threaded MOLECULE build (dist/cpp/lammps.js)
+ * - "kokkos": the multi-threaded KOKKOS build (dist/cpp/lammps-kokkos.js)
+ * - "atomify": the full-package build (dist/cpp/lammps-atomify.js), which is
+ *   also a multi-threaded KOKKOS/pthreads build
+ */
+export type LammpsVariant = "serial" | "kokkos" | "atomify";
+
 export interface LammpsClientOptions {
   workdir?: string;
   /**
@@ -78,8 +87,19 @@ export interface LammpsClientOptions {
    * Use the multi-threaded KOKKOS wasm build (dist/cpp/lammps-kokkos.js).
    * Requires a cross-origin isolated context in browsers
    * (SharedArrayBuffer). `true` uses default options.
+   * Equivalent to `variant: "kokkos"`; with `variant: "atomify"` it still
+   * configures the Kokkos threads/suffix options.
    */
   kokkos?: boolean | KokkosOptions;
+  /**
+   * Select the wasm build explicitly. An explicit variant takes precedence
+   * over the `kokkos` flag (`kokkos: true` is shorthand for
+   * `variant: "kokkos"`). Both "kokkos" and "atomify" are multi-threaded
+   * KOKKOS/pthreads builds: they start LAMMPS with `-k on t N [-sf kk]`
+   * (tunable via the `kokkos` option) and require a cross-origin isolated
+   * context in browsers (SharedArrayBuffer).
+   */
+  variant?: LammpsVariant;
 }
 
 const KOKKOS_MAX_THREADS = 8;
@@ -89,6 +109,14 @@ function resolveKokkosOptions(value: boolean | KokkosOptions | undefined): Kokko
     return null;
   }
   return value === true ? {} : value;
+}
+
+/** Explicit `variant` wins; otherwise the `kokkos` flag selects "kokkos". */
+function resolveVariant(options: LammpsClientOptions): LammpsVariant {
+  if (options.variant) {
+    return options.variant;
+  }
+  return options.kokkos ? "kokkos" : "serial";
 }
 
 function defaultKokkosThreads(): number {
@@ -219,7 +247,11 @@ export class LammpsClient {
     this.instance = instance;
     this.workdir = options.workdir ?? DEFAULT_WORKDIR;
     this._shifts = buildShiftMap(module);
-    this.#kokkos = resolveKokkosOptions(options.kokkos);
+    // "atomify" is itself a KOKKOS/pthreads build, so every non-serial
+    // variant starts with Kokkos arguments; the `kokkos` option only tunes
+    // threads/suffix when a threaded variant is selected.
+    const variant = resolveVariant(options);
+    this.#kokkos = variant === "serial" ? null : resolveKokkosOptions(options.kokkos) ?? {};
 
     try {
       module.FS.mkdir(this.workdir);
@@ -244,11 +276,15 @@ export class LammpsClient {
     if (clientOptions.worker) {
       return createWorkerBackedClient(moduleOptions, clientOptions, clientOptions.worker);
     }
-    // Both wasm modules are imported lazily so that consumers (and CI
+    // The wasm modules are imported lazily so that consumers (and CI
     // variants) only need the artifact they actually use.
-    const factory = clientOptions.kokkos
-      ? (await import("./cpp/lammps-kokkos.js")).default
-      : (await import("./cpp/lammps.js")).default;
+    const variant = resolveVariant(clientOptions);
+    const factory =
+      variant === "atomify"
+        ? (await import("./cpp/lammps-atomify.js")).default
+        : variant === "kokkos"
+          ? (await import("./cpp/lammps-kokkos.js")).default
+          : (await import("./cpp/lammps.js")).default;
     const module = await factory(moduleOptions);
     const instance = new module.LAMMPSWeb();
     return new LammpsClient(module, instance, clientOptions);
@@ -488,7 +524,8 @@ async function createWorkerBackedClient(
   const options: LammpsWorkerClientOptions = {
     workdir: clientOptions.workdir,
     onError: clientOptions.onError,
-    kokkos: clientOptions.kokkos
+    kokkos: clientOptions.kokkos,
+    variant: clientOptions.variant
   };
   if (print || printErr) {
     options.onOutput = (stream, text) => {
@@ -521,7 +558,8 @@ export async function createLammps(
   return LammpsClient.create(moduleOptions, {
     workdir: clientOptions.workdir,
     onError: clientOptions.onError,
-    kokkos: clientOptions.kokkos
+    kokkos: clientOptions.kokkos,
+    variant: clientOptions.variant
   });
 }
 

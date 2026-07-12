@@ -1,6 +1,6 @@
 {
   "name": "lammps.js",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Run LAMMPS directly in the browser — a WebAssembly build with TypeScript-ready bindings.",
   "license": "MIT",
   "repository": {
@@ -33,6 +33,9 @@
   "files": [
     "dist",
     "cpp/build.py",
+    "python/lammps",
+    "python/pyproject.toml",
+    "python/README.md",
     "README.md",
     "LICENSE"
   ],

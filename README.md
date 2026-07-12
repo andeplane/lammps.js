@@ -26,6 +26,24 @@ needs a [cross-origin-isolated](#required-headers-browsers-only) context
 (`SharedArrayBuffer`) to run in the browser. It is larger (~41 MB module,
 ~10 MB gzipped) than the default (~11 MB):
 
+The easiest way to use it is the `variant` client option — the client loads
+the atomify module and starts LAMMPS with Kokkos threads enabled (the kk
+accelerator suffix is applied by default; threads/suffix are tunable via the
+`kokkos` option):
+
+```ts
+import { LammpsClient } from "lammps.js/client";
+
+const lammps = await LammpsClient.create({}, { variant: "atomify" });
+lammps.start();
+lammps.runScript("pair_style vashishta\n"); // MANYBODY — not in the default build
+```
+
+`variant` accepts `"serial"` (default), `"kokkos"`, or `"atomify"`; an
+explicit `variant` takes precedence over the `kokkos` flag (`kokkos: true`
+is shorthand for `variant: "kokkos"`). The Python bindings mirror this as
+`await lammps(variant="atomify")`. The wasm module is also usable directly:
+
 ```ts
 import createModule from "lammps.js/wasm-atomify";
 
@@ -34,12 +52,8 @@ const lammps = new wasm.LAMMPSWeb();
 // Enable Kokkos threads and the kk accelerator suffix (styles with a /kk
 // variant run multithreaded; the rest fall back to serial).
 lammps.startWithArgs(["-k", "on", "t", "4", "-sf", "kk"]);
-lammps.runScript("pair_style vashishta\n"); // MANYBODY — not in the default build
+lammps.runScript("pair_style vashishta\n");
 ```
-
-There is no separate `LammpsClient` entry point for this variant yet; use the
-wasm module directly as above, or the equivalent low-level calls shown in
-[Usage (manual stepping, optional)](#usage-manual-stepping-optional).
 
 ## Usage (main flow: `runScriptAsync`)
 

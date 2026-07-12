@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lammps-js"
 # Tracks the lammps.js npm package version this binding is developed against.
-version = "1.5.0"
+version = "1.6.0"
 description = "LAMMPS Python bindings for the browser: drives the lammps.js WebAssembly engine from a Pyodide kernel (JupyterLite), mirroring the official `lammps` Python module API (imports as `lammps`)."
 readme = "README.md"
 requires-python = ">=3.10"

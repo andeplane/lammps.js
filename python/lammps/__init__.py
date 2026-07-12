@@ -22,6 +22,11 @@ same command-line arguments as native LAMMPS:
 
     lmp = await lammps(cmdargs=["-k", "on", "t", "4", "-sf", "kk"])
 
+The full-package Atomify build (also a multithreaded KOKKOS build, with e.g.
+MANYBODY, KSPACE, REAXFF, GRANULAR enabled) is selected with:
+
+    lmp = await lammps(variant="atomify")
+
 Differences from the native module, by necessity or convenience:
 
 - Creation is `await lammps(...)` instead of `lammps(...)`.
@@ -392,10 +397,17 @@ class lammps:  # noqa: N801 - mirrors the official class name
 
     - ``kokkos``: True or ``{"threads": n}`` to use the multithreaded
       KOKKOS wasm build (equivalently pass native-style ``cmdargs``).
+    - ``variant``: "serial", "kokkos" or "atomify" to select the wasm build
+      explicitly. "atomify" is the full-package build (MANYBODY, KSPACE,
+      REAXFF, GRANULAR, …) and, like "kokkos", is multithreaded. An explicit
+      ``variant`` takes precedence over ``kokkos``; ``kokkos=True`` is
+      shorthand for ``variant="kokkos"``.
     - ``output``: callable that receives each LAMMPS output line
       (default: ``print``). Pass ``None`` to silence output.
     - ``client_url``: URL of client.js, overriding auto-detection.
     """
+
+    _VARIANTS = ("serial", "kokkos", "atomify")
 
     def __init__(
         self,
@@ -405,10 +417,16 @@ class lammps:  # noqa: N801 - mirrors the official class name
         comm=None,
         *,
         kokkos=None,
+        variant: str | None = None,
         output=print,
         client_url: str | None = None,
     ):
         del name, ptr, comm  # accepted for API compatibility
+        if variant is not None and variant not in self._VARIANTS:
+            raise ValueError(
+                f"variant must be one of {self._VARIANTS}, got {variant!r}"
+            )
+        self._variant = variant
         self._cmdargs = [str(a) for a in cmdargs] if cmdargs else None
         kk_from_args = _parse_kokkos_cmdargs(self._cmdargs)
         if kokkos is None:
@@ -438,13 +456,19 @@ class lammps:  # noqa: N801 - mirrors the official class name
             return self
         js, _run_js, create_proxy, to_js = self._ffi = _require_pyodide()
 
-        if self._kokkos is not None and not getattr(js, "crossOriginIsolated", False):
+        # Explicit variant wins; otherwise kokkos/-k arguments select the
+        # KOKKOS build (mirrors resolveVariant in client.ts).
+        variant = self._variant or (
+            "kokkos" if self._kokkos is not None else "serial"
+        )
+
+        if variant != "serial" and not getattr(js, "crossOriginIsolated", False):
             raise LammpsError(
-                "The KOKKOS multithreaded build needs SharedArrayBuffer, "
-                "which requires a cross-origin isolated page (COOP/COEP "
-                "headers). This page is not cross-origin isolated — create "
-                "the instance without kokkos/-k arguments to use the "
-                "single-threaded build."
+                f"The {variant} build is multithreaded and needs "
+                "SharedArrayBuffer, which requires a cross-origin isolated "
+                "page (COOP/COEP headers). This page is not cross-origin "
+                "isolated — create the instance without variant=/kokkos/-k "
+                "arguments to use the single-threaded build."
             )
 
         url = self._client_url or _default_client_url(js)
@@ -456,16 +480,20 @@ class lammps:  # noqa: N801 - mirrors the official class name
 
         # Reuse the wasm module across lammps() calls — this shares the
         # in-memory filesystem so files written by one session are visible
-        # to the next without manual copying.
-        cache_key = f"{url}|{'kk' if self._kokkos is not None else 'serial'}"
+        # to the next without manual copying. Each variant is a distinct
+        # wasm module, so the cache is keyed per (client URL, variant).
+        cache_key = f"{url}|{variant}"
+        client_opts = to_js(
+            {
+                "kokkos": self._kokkos if self._kokkos is not None else False,
+                "variant": variant,
+            },
+            dict_converter=js.Object.fromEntries,
+        )
         wasm_module = _wasm_modules.get(cache_key)
         if wasm_module is None:
             module_opts = to_js(
                 {"print": print_proxy, "printErr": printerr_proxy},
-                dict_converter=js.Object.fromEntries,
-            )
-            client_opts = to_js(
-                {"kokkos": self._kokkos if self._kokkos is not None else False},
                 dict_converter=js.Object.fromEntries,
             )
             self._client = await mod.LammpsClient.create(module_opts, client_opts)
@@ -474,7 +502,7 @@ class lammps:  # noqa: N801 - mirrors the official class name
             wasm_module.print = print_proxy
             wasm_module.printErr = printerr_proxy
             instance = wasm_module.LAMMPSWeb.new()
-            self._client = mod.LammpsClient.new(wasm_module, instance)
+            self._client = mod.LammpsClient.new(wasm_module, instance, client_opts)
 
         # Mount JupyterLite's DriveFS on /work so LAMMPS reads/writes go
         # directly to the notebook filesystem — no syncing needed.
