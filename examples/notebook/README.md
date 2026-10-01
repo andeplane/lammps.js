@@ -1,6 +1,6 @@
 # lammps.js notebooks (JupyterLite site)
 
-The in-browser notebook tutorials deployed at `editor.lammps.org/notebook/`.
+The in-browser notebook tutorials deployed at `andeplane.github.io/lammps.js/notebook/`.
 See `NOTEBOOK_TUTORIALS.md` at the repo root for the tutorial roadmap.
 
 - `content/` — the built-in notebooks (passed to `jupyter lite build

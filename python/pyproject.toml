@@ -14,7 +14,7 @@ dependencies = ["numpy"]
 
 [project.urls]
 Homepage = "https://github.com/andeplane/lammps.js"
-Documentation = "https://editor.lammps.org/notebook/"
+Documentation = "https://andeplane.github.io/lammps.js/notebook/"
 
 [tool.setuptools]
 packages = ["lammps"]

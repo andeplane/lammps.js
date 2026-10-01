@@ -5,9 +5,9 @@
 
 LAMMPS in the browser. WebAssembly build + a small TS-friendly client.
 
-**[Interactive docs →](https://editor.lammps.org/docs/)** — every API with live, editable examples
-&nbsp;·&nbsp; **[Playground →](https://editor.lammps.org/)**
-&nbsp;·&nbsp; **[Notebooks →](https://editor.lammps.org/notebook/lab/index.html?path=index.ipynb)** — Jupyter tutorials running LAMMPS in your browser
+**[Interactive docs →](https://andeplane.github.io/lammps.js/docs/)** — every API with live, editable examples
+&nbsp;·&nbsp; **[Playground →](https://andeplane.github.io/lammps.js/)**
+&nbsp;·&nbsp; **[Notebooks →](https://andeplane.github.io/lammps.js/notebook/lab/index.html?path=index.ipynb)** — Jupyter tutorials running LAMMPS in your browser
 
 ## Install
 
@@ -308,7 +308,7 @@ npm run test:atomify    # atomify build + atomify suite
 
 ## Notebooks (JupyterLite)
 
-[editor.lammps.org/notebook](https://editor.lammps.org/notebook/lab/index.html?path=index.ipynb) hosts Jupyter
+[andeplane.github.io/lammps.js/notebook](https://andeplane.github.io/lammps.js/notebook/lab/index.html?path=index.ipynb) hosts Jupyter
 notebook tutorials that run LAMMPS **in Python, entirely in the browser** — a
 [JupyterLite](https://jupyterlite.readthedocs.io/) site with a Pyodide kernel.
 The notebooks use the `lammps-js` Python package (repo-root `python/`,

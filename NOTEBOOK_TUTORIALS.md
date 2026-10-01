@@ -1,6 +1,6 @@
 # LAMMPS.js Jupyter Notebook Tutorials
 
-Plan and ideas for an in-browser notebook tutorial site at **editor.lammps.org/notebook/**,
+Plan and ideas for an in-browser notebook tutorial site at **andeplane.github.io/lammps.js/notebook/**,
 built with [JupyterLite](https://jupyterlite.readthedocs.io/) and its Python
 (Pyodide) kernel, running LAMMPS entirely client-side through `lammps.js` and
 the bundled `lammps-js` Python bindings.
@@ -42,7 +42,7 @@ the kernel is the browser.
   `/docs/` instead.
 - Deployment: the Pages workflow builds the JupyterLite site into
   `examples/pages/dist/notebook/` after the vite build, so it ships inside the same
-  Pages artifact → `editor.lammps.org/notebook/`.
+  Pages artifact → `andeplane.github.io/lammps.js/notebook/`.
 - The landing page opens the intro notebook via the `?path=` URL parameter
   (e.g. `/notebook/lab/index.html?path=index.ipynb`); the "Try in Jupyter notebook"
   button on the playground links straight there.
