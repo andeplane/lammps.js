@@ -91,3 +91,25 @@ insert the expected number of particles under `-k on -sf kk`.
 **Upstream potential:** moderate. Upstream may prefer to keep the guard for
 device (GPU) builds and only allow host execution spaces, or to require a
 kokkos atom style sync audit first.
+
+## 0005-strip-nul-from-formatted-messages.patch
+
+**What:** strips NUL characters from fmt-formatted message text in
+`Error::_all`, `Error::_one`, `Error::_warning` (`src/error.cpp`) and
+`utils::fmtargs_logmesg` (`src/utils.cpp`) before it is written.
+
+**Why:** LAMMPS raises the C++ standard to C++20 when KOKKOS is enabled
+(Kokkos 5 requires it). Under C++20 the bundled fmt (10.2) formats a
+fixed-size `char` array argument at its full length instead of up to the
+first NUL. For example, ReaxFF's `char name[4]` holding `"X"` becomes
+`"X\0\0\0"`. `fputs()` stops at the first NUL, so the rest of the message is
+lost, including the `(file:line)` suffix and the trailing newline. The next
+line of output then gets glued onto it: ReaxFF's "Changed valency_val to
+valency_boc for X" warning swallowed the following `print`, which broke
+Atomify's output markers on four ReaxFF examples. This affects only the
+KOKKOS and atomify builds, not the serial (C++17) one.
+
+**Upstream potential:** good, as a bug report. The real fix upstream is to
+stop passing raw char arrays to fmt (`std::string(name)` or `.data()`
+casts), or to pin fmt's C-string behavior for C++20. This patch is a
+blanket safety net at the output sinks.
