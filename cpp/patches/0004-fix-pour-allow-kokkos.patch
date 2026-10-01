@@ -1,0 +1,17 @@
+diff --git a/src/GRANULAR/fix_pour.cpp b/src/GRANULAR/fix_pour.cpp
+index 278967e..bcf2bca 100644
+--- a/src/GRANULAR/fix_pour.cpp
++++ b/src/GRANULAR/fix_pour.cpp
+@@ -56,8 +56,10 @@ FixPour::FixPour(LAMMPS *lmp, int narg, char **arg) :
+ {
+   if (narg < 6) utils::missing_cmd_args(FLERR, "fix pour", error);
+ 
+-  if (lmp->kokkos)
+-    error->all(FLERR, Error::COMMAND, "Cannot yet use fix pour with the KOKKOS package");
++  // lammps.js: no KOKKOS guard. Like fix deposit (which has none), fix pour
++  // inserts atoms on the host in pre_exchange(), and ModifyKokkos syncs a
++  // non-kokkosable fix's data to the host around that call. Web UIs run every
++  // script with KOKKOS enabled (see LAMMPS-patches.md).
+ 
+   scalar_flag = 1;
+   extscalar = 0;

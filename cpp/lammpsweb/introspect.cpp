@@ -276,6 +276,14 @@ bool ModifierState::syncVariable() {
 
 bool executeCompute(LAMMPS_NS::LAMMPS *lmp, LAMMPS_NS::Compute *compute) {
   const auto *update = lmp->update;
+  // Before the first run/minimize LAMMPS has not initialized computes (no
+  // init(), no neighbor lists), so invoking one errors — e.g. compute rdf's
+  // "occasional neighbor list before initialization" — and LAMMPS prints the
+  // ERROR to the console even when the caller catches it. Same rule as
+  // Thermo's "before initial run" checks.
+  if (update->whichflag == 0 && update->first_update == 0) {
+    return false;
+  }
   // Energy/pressure contributions only exist on timesteps where LAMMPS
   // tallied them; invoking the compute on other steps is a LAMMPS error.
   if ((compute->peflag || compute->peatomflag) && update->ntimestep != update->eflag_global) {

@@ -69,3 +69,25 @@ upstream LAMMPS. The upstreamable idea is a general mechanism for
 library-registered callbacks that don't depend on the box (e.g. allowing
 `fix external` in the exceptions list, or a dedicated pre-box-safe fix
 flag).
+
+## 0004-fix-pour-allow-kokkos.patch
+
+**What:** removes the blanket `if (lmp->kokkos) error->all(...)` guard
+("Cannot yet use fix pour with the KOKKOS package") from the `FixPour`
+constructor (`src/GRANULAR/fix_pour.cpp`).
+
+**Why:** the guard fires whenever KOKKOS is *enabled* (`-k on`), even if
+fix pour and every other style in the script run serially. Atomify loads a
+single KOKKOS/pthreads module and has to start every LAMMPS instance with
+`-k on` (Kokkos can only be initialized once per wasm module), so without
+this patch no `fix pour` script can run at all. Fix pour is not kokkosable:
+it inserts atoms on the host in `pre_exchange()`, exactly like `fix deposit`,
+which has no such guard. `ModifyKokkos::pre_exchange` syncs a non-kokkosable
+fix's data to the host before the call and marks it modified afterwards, with
+`auto_sync` on. The Atomify pour/granular examples (`pour_2d`,
+`pour_2d_molecule` with rigid bodies, `pour_3d`, granular patterns) run and
+insert the expected number of particles under `-k on -sf kk`.
+
+**Upstream potential:** moderate. Upstream may prefer to keep the guard for
+device (GPU) builds and only allow host execution spaces, or to require a
+kokkos atom style sync audit first.
