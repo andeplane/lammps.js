@@ -13,7 +13,7 @@ license = { text = "MIT" }
 dependencies = ["numpy"]
 
 [project.urls]
-Homepage = "https://github.com/lammps/lammps.js"
+Homepage = "https://github.com/andeplane/lammps.js"
 Documentation = "https://editor.lammps.org/notebook/"
 
 [tool.setuptools]

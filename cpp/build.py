@@ -13,7 +13,7 @@ Usage:
 
 Environment variables:
     EMSDK_PATH    - Path to Emscripten SDK (required)
-    LAMMPS_TAG    - Git tag/branch for LAMMPS (default: patch_10Sep2025)
+    LAMMPS_TAG    - Git tag/branch for LAMMPS (default: stable_30Sep2026)
     PACKAGES      - Space-separated list of LAMMPS packages (default: MOLECULE),
                     or the preset "atomify" for the full set Atomify's example
                     library needs. The atomify preset is a distinct build
@@ -41,7 +41,7 @@ ATOMIFY_PACKAGES = (
 )
 
 # Configuration
-LAMMPS_TAG = os.environ.get("LAMMPS_TAG", "patch_10Sep2025")
+LAMMPS_TAG = os.environ.get("LAMMPS_TAG", "stable_30Sep2026")
 _packages_env = os.environ.get("PACKAGES", "MOLECULE")
 IS_ATOMIFY_VARIANT = _packages_env.strip().lower() == "atomify"
 if IS_ATOMIFY_VARIANT:

@@ -1,6 +1,6 @@
 # lammps.js
 
-[![CI](https://github.com/lammps/lammps.js/actions/workflows/ci.yml/badge.svg)](https://github.com/lammps/lammps.js/actions/workflows/ci.yml)
+[![CI](https://github.com/andeplane/lammps.js/actions/workflows/ci.yml/badge.svg)](https://github.com/andeplane/lammps.js/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/lammps.js.svg)](https://www.npmjs.com/package/lammps.js)
 
 LAMMPS in the browser. WebAssembly build + a small TS-friendly client.
@@ -340,7 +340,7 @@ notebooks) and deploys with the Pages workflow. See
 Teach AI coding agents (Claude Code, Cursor, Codex, …) how to use lammps.js:
 
 ```bash
-npx skills add lammps/lammps.js
+npx skills add andeplane/lammps.js
 ```
 
 This installs the [`lammps-js` skill](skills/lammps-js/SKILL.md) — a compact

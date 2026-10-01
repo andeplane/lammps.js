@@ -5,11 +5,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lammps/lammps.js.git"
+    "url": "git+https://github.com/andeplane/lammps.js.git"
   },
   "homepage": "https://editor.lammps.org",
   "bugs": {
-    "url": "https://github.com/lammps/lammps.js/issues"
+    "url": "https://github.com/andeplane/lammps.js/issues"
   },
   "type": "module",
   "exports": {

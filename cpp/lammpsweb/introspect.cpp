@@ -362,9 +362,9 @@ void ModifierRegistry::refresh(LAMMPS_NS::LAMMPS *lmp) {
   auto *variable = lmp->input->variable;
   int nvar = 0;
   LAMMPS_NS::Info info(lmp);
-  char **names = info.get_variable_names(nvar);
+  const std::vector<std::string> names = info.get_variable_names(nvar);
   for (int i = 0; i < nvar; ++i) {
-    const int ivar = variable->find(names[i]);
+    const int ivar = variable->find(names[i].c_str());
     if (ivar < 0) {
       continue;
     }
