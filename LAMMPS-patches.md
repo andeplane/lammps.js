@@ -69,3 +69,47 @@ upstream LAMMPS. The upstreamable idea is a general mechanism for
 library-registered callbacks that don't depend on the box (e.g. allowing
 `fix external` in the exceptions list, or a dedicated pre-box-safe fix
 flag).
+
+## 0004-fix-pour-allow-kokkos.patch
+
+**What:** removes the blanket `if (lmp->kokkos) error->all(...)` guard
+("Cannot yet use fix pour with the KOKKOS package") from the `FixPour`
+constructor (`src/GRANULAR/fix_pour.cpp`).
+
+**Why:** the guard fires whenever KOKKOS is *enabled* (`-k on`), even if
+fix pour and every other style in the script run serially. Atomify loads a
+single KOKKOS/pthreads module and has to start every LAMMPS instance with
+`-k on` (Kokkos can only be initialized once per wasm module), so without
+this patch no `fix pour` script can run at all. Fix pour is not kokkosable:
+it inserts atoms on the host in `pre_exchange()`, exactly like `fix deposit`,
+which has no such guard. `ModifyKokkos::pre_exchange` syncs a non-kokkosable
+fix's data to the host before the call and marks it modified afterwards, with
+`auto_sync` on. The Atomify pour/granular examples (`pour_2d`,
+`pour_2d_molecule` with rigid bodies, `pour_3d`, granular patterns) run and
+insert the expected number of particles under `-k on -sf kk`.
+
+**Upstream potential:** moderate. Upstream may prefer to keep the guard for
+device (GPU) builds and only allow host execution spaces, or to require a
+kokkos atom style sync audit first.
+
+## 0005-strip-nul-from-formatted-messages.patch
+
+**What:** strips NUL characters from fmt-formatted message text in
+`Error::_all`, `Error::_one`, `Error::_warning` (`src/error.cpp`) and
+`utils::fmtargs_logmesg` (`src/utils.cpp`) before it is written.
+
+**Why:** LAMMPS raises the C++ standard to C++20 when KOKKOS is enabled
+(Kokkos 5 requires it). Under C++20 the bundled fmt (10.2) formats a
+fixed-size `char` array argument at its full length instead of up to the
+first NUL. For example, ReaxFF's `char name[4]` holding `"X"` becomes
+`"X\0\0\0"`. `fputs()` stops at the first NUL, so the rest of the message is
+lost, including the `(file:line)` suffix and the trailing newline. The next
+line of output then gets glued onto it: ReaxFF's "Changed valency_val to
+valency_boc for X" warning swallowed the following `print`, which broke
+Atomify's output markers on four ReaxFF examples. This affects only the
+KOKKOS and atomify builds, not the serial (C++17) one.
+
+**Upstream potential:** good, as a bug report. The real fix upstream is to
+stop passing raw char arrays to fmt (`std::string(name)` or `.data()`
+casts), or to pin fmt's C-string behavior for C++20. This patch is a
+blanket safety net at the output sinks.

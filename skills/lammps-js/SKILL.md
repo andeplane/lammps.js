@@ -6,7 +6,7 @@ description: Run LAMMPS molecular dynamics simulations in the browser or Node wi
 # lammps.js — LAMMPS in the browser
 
 `lammps.js` is LAMMPS compiled to WebAssembly with a TypeScript client.
-Interactive docs with runnable examples: https://editor.lammps.org/docs/
+Interactive docs with runnable examples: https://andeplane.github.io/lammps.js/docs/
 
 ```bash
 npm install lammps.js

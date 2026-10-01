@@ -1,6 +1,6 @@
 # lammps-js (LAMMPS Python bindings for the browser)
 
-Python bindings that drive the [lammps.js](https://github.com/lammps/lammps.js)
+Python bindings that drive the [lammps.js](https://github.com/andeplane/lammps.js)
 WebAssembly engine from a Pyodide kernel (JupyterLite), mirroring the official
 [`lammps` Python module](https://docs.lammps.org/Python_module.html):
 
