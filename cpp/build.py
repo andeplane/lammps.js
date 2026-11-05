@@ -13,7 +13,7 @@ Usage:
 
 Environment variables:
     EMSDK_PATH    - Path to Emscripten SDK (required)
-    LAMMPS_TAG    - Git tag/branch for LAMMPS (default: stable_30Sep2026)
+    LAMMPS_TAG    - Git tag/branch for LAMMPS (default: stable_30Sep2026_update1)
     PACKAGES      - Space-separated list of LAMMPS packages (default: MOLECULE),
                     or the preset "atomify" for the full set Atomify's example
                     library needs. The atomify preset is a distinct build
@@ -48,7 +48,7 @@ ATOMIFY_PACKAGES = (
 )
 
 # Configuration
-LAMMPS_TAG = os.environ.get("LAMMPS_TAG", "stable_30Sep2026")
+LAMMPS_TAG = os.environ.get("LAMMPS_TAG", "stable_30Sep2026_update1")
 _packages_env = os.environ.get("PACKAGES", "MOLECULE")
 IS_ATOMIFY_VARIANT = _packages_env.strip().lower() == "atomify"
 if IS_ATOMIFY_VARIANT:
@@ -378,6 +378,13 @@ def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
     emcc_args.extend([
         "-s", "ALLOW_MEMORY_GROWTH=1",
         "-s", "INITIAL_MEMORY=256MB",
+        # Emscripten's default 64KB stack is too small for LAMMPS: deep call
+        # chains (e.g. a KOKKOS ParallelFor run on the main thread under
+        # pair_style hybrid) overflow it. The stack grows down into the end of
+        # BSS, where it silently corrupts unrelated globals; with
+        # stable_30Sep2026_update1 that was Emscripten's itimer state, so a
+        # bogus SIGALRM ended the program with exit(142).
+        "-s", "STACK_SIZE=2MB",
     ])
 
     # Async support
