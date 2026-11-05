@@ -50,6 +50,22 @@ sw = sw.replace(
     "async function _lammpsMaybeFromCache(e){",
     1,
 )
+
+# Requests the worker must not touch. Chrome's DevTools issues
+# `cache: "only-if-cached"` requests, which fetch() rejects with a TypeError
+# ("Failed to fetch") unless their mode is same-origin; answering them through
+# the worker turns every such request into an uncaught error (coi-serviceworker
+# skips them for the same reason). Let the browser handle them directly.
+DROP = "function shouldDrop(e,a){return"
+assert sw.count(DROP) == 1, (
+    "jupyterlite service-worker.js changed shape (expected shouldDrop); "
+    "update coi_patch.py for this jupyterlite-core version"
+)
+sw = sw.replace(
+    DROP,
+    'function shouldDrop(e,a){return(e.cache==="only-if-cached"&&e.mode!=="same-origin")||',
+    1,
+)
 sw += (
     "\nfunction _lammpsCoiHeaders(r){"
     "if(!r||r.status===0){return r}"
