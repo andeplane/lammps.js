@@ -45,20 +45,25 @@ if (missing.length > 0) {
   console.error(
     "verify-pack: tarball is missing files referenced by package.json:\n" +
       missing.map((f) => `  - ${f}`).join("\n") +
-      "\nRun `npm run build`, `npm run build:kokkos`, and `npm run build:atomify` before publishing."
+      "\nRun `npm run build`, `npm run build:kokkos`, `npm run build:atomify`, and `npm run build:atomify-serial` before publishing."
   );
   process.exit(1);
 }
 
 // The wasm entry points must all be real emscripten modules, not stubs —
 // every variant ships in this one package (see the ./wasm-atomify export).
-const requiredWasm = ["dist/cpp/lammps.js", "dist/cpp/lammps-kokkos.js", "dist/cpp/lammps-atomify.js"];
+const requiredWasm = [
+  "dist/cpp/lammps.js",
+  "dist/cpp/lammps-kokkos.js",
+  "dist/cpp/lammps-atomify.js",
+  "dist/cpp/lammps-atomify-serial.js",
+];
 for (const wasmFile of requiredWasm) {
   const content = readFileSync(join(root, wasmFile), "utf8");
   if (content.startsWith(`// ${STUB_MARKER}`)) {
     console.error(
       `verify-pack: ${wasmFile} is a placeholder stub, not a built wasm module.\n` +
-        "Build it first: python3 cpp/build.py, KOKKOS=1 python3 cpp/build.py, and PACKAGES=atomify python3 cpp/build.py."
+        "Build it first: python3 cpp/build.py, KOKKOS=1 python3 cpp/build.py, PACKAGES=atomify python3 cpp/build.py, and PACKAGES=atomify KOKKOS=0 python3 cpp/build.py."
     );
     process.exit(1);
   }
