@@ -1,6 +1,6 @@
 {
   "name": "lammps.js",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Run LAMMPS directly in the browser — a WebAssembly build with TypeScript-ready bindings.",
   "license": "MIT",
   "repository": {
