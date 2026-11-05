@@ -378,6 +378,13 @@ def link_wasm_module(emsdk_env: str, debug_mode: bool = False) -> None:
     emcc_args.extend([
         "-s", "ALLOW_MEMORY_GROWTH=1",
         "-s", "INITIAL_MEMORY=256MB",
+        # Emscripten's default 64KB stack is too small for LAMMPS: deep call
+        # chains (e.g. a KOKKOS ParallelFor run on the main thread under
+        # pair_style hybrid) overflow it. The stack grows down into the end of
+        # BSS, where it silently corrupts unrelated globals; with
+        # stable_30Sep2026_update1 that was Emscripten's itimer state, so a
+        # bogus SIGALRM ended the program with exit(142).
+        "-s", "STACK_SIZE=2MB",
     ])
 
     # Async support
