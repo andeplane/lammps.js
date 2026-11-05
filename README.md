@@ -285,16 +285,19 @@ lammps.dispose();
 npm run build           # serial wasm module + TypeScript
 npm run build:kokkos    # multithreaded KOKKOS wasm module + TypeScript
 npm run build:atomify   # multithreaded KOKKOS + full-package-set wasm module + TypeScript
+npm run build:atomify-serial  # full package set, single-threaded (no KOKKOS) + TypeScript
 ```
 
 Outputs go straight into `dist/`:
 - `dist/cpp/lammps.js` (single-file wasm module, MOLECULE package)
 - `dist/cpp/lammps-kokkos.js` (single-file KOKKOS/pthreads wasm module)
 - `dist/cpp/lammps-atomify.js` (single-file KOKKOS/pthreads wasm module, full package set)
+- `dist/cpp/lammps-atomify-serial.js` (single-file wasm module, full package set
+  without KOKKOS/pthreads; needs no cross-origin isolation, so it runs in Safari)
 - `dist/client.js`
 - `dist/**/*.d.ts`
 
-A full publish builds and ships all three (see `.github/workflows/release.yml`);
+A full publish builds and ships all four (see `.github/workflows/release.yml`);
 `npm run build` alone is enough for local development against the default
 package set.
 
