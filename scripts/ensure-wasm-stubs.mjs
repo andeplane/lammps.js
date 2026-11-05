@@ -1,8 +1,8 @@
 // dist/client.js dynamically imports ./cpp/lammps.js and
 // ./cpp/lammps-kokkos.js. Bundlers and vitest resolve those specifiers
 // statically, so a build of one variant still needs a file at the other
-// variant's path. lammps-atomify.js is not imported by client.js, but it is
-// referenced by package.json's exports map, so verify-pack (prepublishOnly)
+// variant's path. lammps-atomify.js and lammps-atomify-serial.js are not imported by
+// client.js, but they are referenced by package.json's exports map, so verify-pack (prepublishOnly)
 // requires it to exist too. This writes a throwing stub for any variant
 // whose real module (built by cpp/build.py) is absent.
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -16,7 +16,11 @@ const distCpp = join(dirname(fileURLToPath(import.meta.url)), "..", "dist", "cpp
 for (const { file, buildCommand } of [
   { file: "lammps.js", buildCommand: "python3 cpp/build.py" },
   { file: "lammps-kokkos.js", buildCommand: "KOKKOS=1 python3 cpp/build.py" },
-  { file: "lammps-atomify.js", buildCommand: "PACKAGES=atomify python3 cpp/build.py" }
+  { file: "lammps-atomify.js", buildCommand: "PACKAGES=atomify python3 cpp/build.py" },
+  {
+    file: "lammps-atomify-serial.js",
+    buildCommand: "PACKAGES=atomify KOKKOS=0 python3 cpp/build.py"
+  }
 ]) {
   const target = join(distCpp, file);
   const isRealModule =

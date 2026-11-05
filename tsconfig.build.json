@@ -17,6 +17,7 @@
     "cpp/lammps.d.ts",
     "cpp/lammps-kokkos.d.ts",
     "cpp/lammps-atomify.d.ts",
+    "cpp/lammps-atomify-serial.d.ts",
     "types/**/*.d.ts"
   ]
 }
