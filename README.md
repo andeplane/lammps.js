@@ -303,6 +303,8 @@ package set.
 
 ## Tests
 
+See [Contributing](CONTRIBUTING.md) for how to report an issue, request support, or propose a change.
+
 ```bash
 npm test                # serial build + full suite
 npm run test:kokkos     # KOKKOS build + KOKKOS suite
