@@ -2,7 +2,7 @@
   "name": "lammps.js",
   "version": "1.6.2",
   "description": "Run LAMMPS directly in the browser — a WebAssembly build with TypeScript-ready bindings.",
-  "license": "MIT",
+  "license": "GPL-2.0-only",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/andeplane/lammps.js.git"

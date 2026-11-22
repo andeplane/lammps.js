@@ -5,6 +5,8 @@
 
 LAMMPS in the browser. WebAssembly build + a small TS-friendly client.
 
+The npm package includes a WebAssembly build of LAMMPS and is distributed under the [GNU General Public License, version 2](LICENSE). The [build script](cpp/build.py) identifies the upstream LAMMPS revision and the patches used to build the engine.
+
 **[Interactive docs →](https://andeplane.github.io/lammps.js/docs/)** — every API with live, editable examples
 &nbsp;·&nbsp; **[Playground →](https://andeplane.github.io/lammps.js/)**
 &nbsp;·&nbsp; **[Notebooks →](https://andeplane.github.io/lammps.js/notebook/lab/index.html?path=index.ipynb)** — Jupyter tutorials running LAMMPS in your browser
