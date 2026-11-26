@@ -6,6 +6,8 @@ Read the [rendered JOSS proof](paper.pdf) or review the [Markdown manuscript](pa
 - Open the Elastic Network Editor's [rotating-squares](https://mendelsresearchgroup.github.io/elastic-network-editor/?example=rotating-squares) and [negative thermal expansion](https://mendelsresearchgroup.github.io/elastic-network-editor/?example=negative-thermal-expansion) examples. The [editor repository](https://github.com/MendelsResearchGroup/elastic-network-editor) contains the model inputs and reproduction scripts.
 - See the [contributor guide](../CONTRIBUTING.md) for build and test instructions.
 
+[Figure 1](figures/simulation-examples.png) uses snapshots from lammps.js 1.6.2. The network panels show the relaxed state and the final state after applying the [rotating-squares compression protocol](https://github.com/MendelsResearchGroup/elastic-network-editor/tree/d7d6de88f37e6116d89eec134099afb7326bd90a/examples/rotating-squares). The peptide panel uses the final coordinates from the LAMMPS [input script](https://raw.githubusercontent.com/lammps/lammps/stable_30Sep2026_update1/examples/peptide/in.peptide) and [data file](https://raw.githubusercontent.com/lammps/lammps/stable_30Sep2026_update1/examples/peptide/data.peptide), run with the `lammps.js/wasm-atomify-serial` build.
+
 Before submission, confirm the author affiliations and the details of human review in the AI usage disclosure. The DOI and publication fields in the PDF are draft placeholders.
 
 ## Regenerate the proof
