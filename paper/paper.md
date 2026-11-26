@@ -7,22 +7,22 @@ tags:
   - JavaScript
   - research software
 authors:
-  - name: Alexander Zhilkin
+  - name: Anders Hafreager
     affiliation: 1
     equal-contrib: true
-  - name: Anders Hafreager
+  - name: Alexander Zhilkin
     affiliation: 2
     equal-contrib: true
 affiliations:
-  - name: Technion – Israel Institute of Technology, Haifa, Israel
+  - name: Center for Computing in Science Education, University of Oslo, Oslo, Norway
     index: 1
-  - name: Affiliation to be confirmed
+  - name: Technion, Haifa
     index: 2
 date: 22 November 2026
 bibliography: paper.bib
 ---
 
-<!-- Author review: confirm Anders's current affiliation. University of Oslo is his affiliation in the 2017 Atomify workshop record. Confirm author order and add ORCIDs if available. The date above is for this draft. Record the version of lammps.js submitted for review. -->
+<!-- Author review: add ORCIDs if available. The date above is for this draft. Record the version of lammps.js submitted for review. -->
 
 # Summary
 
@@ -62,7 +62,7 @@ Alexander Zhilkin also uses lammps.js to prepare and visualize examples for a mo
 
 # AI usage disclosure
 
-We developed the original lammps.js core without generative AI assistance. We used OpenAI Codex and Anthropic Claude during later feature development and revision. We made the core design decisions, reviewed the changes and tested them manually in our existing workflows. The project also uses automated regression tests. Alexander Zhilkin and Anders Hafreager wrote the original manuscript. We used OpenAI Codex (GPT-6.2 Sol) to revise the draft, assist with code, tests, and documentation for the Elastic Network Editor case study, and plot the simulation snapshots. We take responsibility for the software and manuscript.
+We developed the original lammps.js core without generative AI assistance. We used OpenAI Codex and Anthropic Claude during later feature development and revision. We made the core design decisions, reviewed the changes and tested them manually in our existing workflows. The project also uses automated regression tests. Anders Hafreager and Alexander Zhilkin wrote the original manuscript. We used OpenAI Codex (GPT-6.2 Sol) to revise the draft, assist with code, tests, and documentation for the Elastic Network Editor case study, and plot the simulation snapshots. We take responsibility for the software and manuscript.
 
 <!-- Author review: add the model versions and specific uses from Codex and Claude development sessions where known. Both authors should confirm the wording on manual testing and review, and document how they checked the final AI-assisted manuscript text and case-study materials. -->
 
