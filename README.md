@@ -11,6 +11,8 @@ The npm package includes a WebAssembly build of LAMMPS and is distributed under 
 &nbsp;·&nbsp; **[Playground →](https://andeplane.github.io/lammps.js/)**
 &nbsp;·&nbsp; **[Notebooks →](https://andeplane.github.io/lammps.js/notebook/lab/index.html?path=index.ipynb)** — Jupyter tutorials running LAMMPS in your browser
 
+See the [JOSS paper draft](paper/) for the manuscript, rendered proof, and research examples.
+
 ## Install
 
 ```bash
